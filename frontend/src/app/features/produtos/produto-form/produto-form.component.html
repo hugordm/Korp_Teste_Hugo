@@ -1,0 +1,70 @@
+<div class="min-h-screen bg-gray-50 px-4 py-8 sm:px-6">
+  <div class="mx-auto max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8">
+    <h1 class="text-xl font-semibold tracking-tight text-gray-900 sm:text-2xl">
+      {{ editando() ? 'Editar Produto' : 'Novo Produto' }}
+    </h1>
+
+    <form [formGroup]="form" (ngSubmit)="salvar()" class="mt-6 flex flex-col gap-5">
+      <!-- Código -->
+      <div>
+        <label for="codigo" class="mb-1.5 block text-sm font-medium text-gray-700">Código</label>
+        <input
+          id="codigo"
+          type="text"
+          formControlName="codigo"
+          class="min-h-11 w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+        />
+        @if (form.controls.codigo.invalid && form.controls.codigo.touched) {
+          <p class="mt-1.5 text-sm text-red-600">Código é obrigatório.</p>
+        }
+      </div>
+
+      <!-- Descrição -->
+      <div>
+        <label for="descricao" class="mb-1.5 block text-sm font-medium text-gray-700">Descrição</label>
+        <input
+          id="descricao"
+          type="text"
+          formControlName="descricao"
+          class="min-h-11 w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+        />
+        @if (form.controls.descricao.invalid && form.controls.descricao.touched) {
+          <p class="mt-1.5 text-sm text-red-600">Descrição é obrigatória.</p>
+        }
+      </div>
+
+      <!-- Saldo -->
+      <div>
+        <label for="saldo" class="mb-1.5 block text-sm font-medium text-gray-700">Saldo</label>
+        <input
+          id="saldo"
+          type="number"
+          formControlName="saldo"
+          class="min-h-11 w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+        />
+        @if (form.controls.saldo.touched && form.controls.saldo.hasError('required')) {
+          <p class="mt-1.5 text-sm text-red-600">Saldo é obrigatório.</p>
+        } @else if (form.controls.saldo.touched && form.controls.saldo.hasError('min')) {
+          <p class="mt-1.5 text-sm text-red-600">Saldo não pode ser negativo.</p>
+        }
+      </div>
+
+      <!-- Ações -->
+      <div class="mt-2 flex flex-col gap-3 sm:flex-row">
+        <button
+          type="button"
+          (click)="cancelar()"
+          class="flex min-h-11 w-full items-center justify-center rounded-lg bg-gray-100 px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 sm:w-auto sm:flex-1"
+        >
+          Cancelar
+        </button>
+        <button
+          type="submit"
+          class="flex min-h-11 w-full items-center justify-center rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700 sm:w-auto sm:flex-1"
+        >
+          {{ editando() ? 'Salvar Alterações' : 'Salvar' }}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

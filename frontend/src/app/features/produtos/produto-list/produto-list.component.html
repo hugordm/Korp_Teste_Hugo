@@ -1,0 +1,117 @@
+<div class="min-h-screen bg-gray-50">
+  <!-- Header fixo no topo: título da tela + ação principal (criar produto). -->
+  <header class="sticky top-0 z-10 border-b border-gray-200 bg-white">
+    <div class="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
+      <h1 class="text-xl font-semibold tracking-tight text-gray-900 sm:text-2xl">Produtos</h1>
+
+      <a
+        routerLink="/produtos/novo"
+        class="flex min-h-11 items-center justify-center rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700"
+      >
+        + Novo Produto
+      </a>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+    @if (produtos().length === 0) {
+      <!-- Estado vazio: nenhum produto cadastrado ainda. -->
+      <div class="flex flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 bg-white px-6 py-16 text-center shadow-sm">
+        <svg
+          class="h-12 w-12 text-gray-300"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke-width="1.5"
+          stroke="currentColor"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375C2.754 3.75 2.25 4.254 2.25 4.875v1.5c0 .621.504 1.125 1.125 1.125z"
+          />
+        </svg>
+        <p class="mt-4 text-base font-medium text-gray-900">Nenhum produto cadastrado</p>
+        <p class="mt-1 text-sm text-gray-500">Comece cadastrando o primeiro produto do estoque.</p>
+        <a
+          routerLink="/produtos/novo"
+          class="mt-6 flex min-h-11 items-center justify-center rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700"
+        >
+          + Novo Produto
+        </a>
+      </div>
+    } @else {
+      <!-- ===== Desktop (md e acima): tabela tradicional ===== -->
+      <div class="hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm md:block">
+        <table class="min-w-full divide-y divide-gray-100">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Código</th>
+              <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Descrição</th>
+              <th class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wide text-gray-500">Saldo</th>
+              <th class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wide text-gray-500">Ações</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            @for (produto of produtos(); track produto.id) {
+              <tr class="transition-colors hover:bg-gray-50">
+                <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">{{ produto.codigo }}</td>
+                <td class="px-6 py-4 text-sm text-gray-600">{{ produto.descricao }}</td>
+                <td class="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-900">{{ produto.saldo }}</td>
+                <td class="whitespace-nowrap px-6 py-4 text-right text-sm">
+                  <div class="flex items-center justify-end gap-3">
+                    <a
+                      [routerLink]="['/produtos', produto.id, 'editar']"
+                      class="font-medium text-indigo-600 hover:text-indigo-800"
+                    >
+                      Editar
+                    </a>
+                    <button
+                      type="button"
+                      (click)="excluir(produto.id)"
+                      class="font-medium text-red-600 hover:text-red-800"
+                    >
+                      Excluir
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ===== Mobile (abaixo de md): lista de cards empilhados ===== -->
+      <ul class="flex flex-col gap-3 md:hidden">
+        @for (produto of produtos(); track produto.id) {
+          <li class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="truncate text-base font-semibold text-gray-900">{{ produto.codigo }}</p>
+                <p class="mt-0.5 truncate text-sm text-gray-500">{{ produto.descricao }}</p>
+              </div>
+              <span class="shrink-0 rounded-full bg-gray-100 px-3 py-1 text-sm font-medium text-gray-700">
+                Saldo: {{ produto.saldo }}
+              </span>
+            </div>
+
+            <div class="mt-4 flex gap-2">
+              <a
+                [routerLink]="['/produtos', produto.id, 'editar']"
+                class="flex min-h-11 flex-1 items-center justify-center rounded-lg bg-indigo-50 px-4 py-2.5 text-sm font-medium text-indigo-600 transition-colors hover:bg-indigo-100"
+              >
+                Editar
+              </a>
+              <button
+                type="button"
+                (click)="excluir(produto.id)"
+                class="flex min-h-11 flex-1 items-center justify-center rounded-lg bg-red-50 px-4 py-2.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-100"
+              >
+                Excluir
+              </button>
+            </div>
+          </li>
+        }
+      </ul>
+    }
+  </main>
+</div>
