@@ -146,4 +146,53 @@ public class ProdutosController : ControllerBase
         // 204 No Content também é o código padrão para exclusão bem-sucedida.
         return NoContent();
     }
+
+    // [HttpPut("{id}/baixar-saldo")] atende "PUT /api/produtos/5/baixar-saldo".
+    // Esse endpoint dedicado existe para representar explicitamente a operação
+    // de negócio "dar baixa no estoque" (ex: quando uma nota fiscal é fechada),
+    // em vez de depender do PUT genérico (que exigiria mandar o objeto Produto
+    // inteiro e calcular o novo saldo no cliente, o que é menos seguro e mais
+    // sujeito a erro).
+    [HttpPut("{id}/baixar-saldo")]
+    public async Task<IActionResult> BaixarSaldo(int id, BaixarSaldoRequest request)
+    {
+        var produto = await _context.Produtos.FindAsync(id);
+
+        // Produto não existe: nada a baixar, devolve 404 Not Found.
+        if (produto == null)
+        {
+            return NotFound();
+        }
+
+        // Validação de saldo insuficiente: antes de subtrair, conferimos se o
+        // Saldo atual do produto é maior ou igual à Quantidade pedida.
+        // Sem essa checagem, o Saldo poderia ficar negativo, o que não faz
+        // sentido para uma quantidade em estoque (não é possível vender mais
+        // do que existe fisicamente disponível). Se a quantidade solicitada
+        // for maior que o saldo disponível, rejeitamos a operação com 400 Bad
+        // Request e uma mensagem explicando o motivo, sem alterar nada no banco.
+        if (produto.Saldo < request.Quantidade)
+        {
+            return BadRequest($"Saldo insuficiente. Saldo atual: {produto.Saldo}, quantidade solicitada: {request.Quantidade}.");
+        }
+
+        // Saldo suficiente: subtrai a quantidade baixada do saldo atual.
+        produto.Saldo -= request.Quantidade;
+
+        // Executa o UPDATE no banco de forma assíncrona.
+        await _context.SaveChangesAsync();
+
+        // 204 No Content indica que a baixa foi aplicada com sucesso e não há
+        // corpo de resposta a devolver.
+        return NoContent();
+    }
+}
+
+// DTO (Data Transfer Object) simples usado só para representar o corpo (body)
+// esperado pelo endpoint de baixa de saldo: um JSON como { "quantidade": 5 }.
+// Usar uma classe própria em vez de receber um "int" solto no body deixa o
+// contrato da API explícito e evita ambiguidade na hora do model binding.
+public class BaixarSaldoRequest
+{
+    public int Quantidade { get; set; }
 }
