@@ -2,6 +2,7 @@ using Faturamento.API.Data;
 using Faturamento.API.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Net.Http.Json;
 
 namespace Faturamento.API.Controllers;
 
@@ -20,15 +21,27 @@ public class NotasFiscaisController : ControllerBase
     // a instância do DbContext que este controller vai usar para falar com o banco.
     private readonly FaturamentoDbContext _context;
 
+    // IHttpClientFactory é o serviço que sabe criar HttpClients "geridos" pelo
+    // framework, a partir dos registros feitos em Program.cs (como o
+    // "EstoqueAPI" configurado com AddHttpClient). Guardamos só a factory
+    // aqui, e não um HttpClient já pronto, porque é a própria factory quem
+    // deve criar o client no momento do uso (CreateClient("EstoqueAPI")) —
+    // é assim que ela consegue reciclar/reutilizar conexões por baixo dos
+    // panos e evitar o esgotamento de sockets mencionado em Program.cs.
+    private readonly IHttpClientFactory _httpClientFactory;
+
     // Construtor do controller. O ASP.NET Core usa Injeção de Dependência (DI):
     // como o FaturamentoDbContext já está registrado em Program.cs
     // ("builder.Services.AddDbContext<FaturamentoDbContext>(...)"), o framework
     // cria automaticamente uma instância dele e a passa aqui sempre que uma
     // requisição chega para este controller — não precisamos instanciar o
-    // DbContext manualmente com "new".
-    public NotasFiscaisController(FaturamentoDbContext context)
+    // DbContext manualmente com "new". O mesmo vale para o IHttpClientFactory,
+    // que é registrado automaticamente pelo framework assim que chamamos
+    // "builder.Services.AddHttpClient(...)" em Program.cs.
+    public NotasFiscaisController(FaturamentoDbContext context, IHttpClientFactory httpClientFactory)
     {
         _context = context;
+        _httpClientFactory = httpClientFactory;
     }
 
     // [HttpGet] marca este método para responder a requisições GET.
@@ -141,5 +154,128 @@ public class NotasFiscaisController : ControllerBase
         // GetNotaFiscal, passando o Id gerado), além da própria nota criada
         // (já com Numero e Status definidos pelo servidor) no corpo da resposta.
         return CreatedAtAction(nameof(GetNotaFiscal), new { id = notaFiscal.Id }, notaFiscal);
+    }
+
+    // [HttpPost("{id}/imprimir")] atende "POST /api/notasfiscais/5/imprimir".
+    // "Imprimir" aqui representa o processo de fechamento da nota: antes de
+    // considerar a nota pronta/fechada, o Faturamento.API precisa avisar o
+    // Estoque.API (outro microsserviço, outro processo, outro banco) para
+    // dar baixa no saldo de cada produto vendido. É justamente essa
+    // comunicação entre serviços — e o que fazer quando ela falha — que este
+    // endpoint existe para demonstrar.
+    [HttpPost("{id}/imprimir")]
+    public async Task<ActionResult<NotaFiscal>> ImprimirNotaFiscal(int id)
+    {
+        // (a) Busca a nota com os itens incluídos (precisamos deles para saber
+        // quais produtos e quantidades baixar no estoque) e confere se existe.
+        var notaFiscal = await _context.NotasFiscais
+            .Include(n => n.Itens)
+            .FirstOrDefaultAsync(n => n.Id == id);
+
+        if (notaFiscal == null)
+        {
+            return NotFound();
+        }
+
+        // (b) Regra de negócio: só faz sentido "imprimir"/fechar uma nota que
+        // ainda está "Aberta". Isso evita imprimir a mesma nota duas vezes
+        // (o que baixaria o estoque em dobro) ou imprimir uma nota já
+        // cancelada, por exemplo.
+        if (notaFiscal.Status != "Aberta")
+        {
+            return BadRequest("Nota fiscal não pode ser impressa pois não está com status Aberta.");
+        }
+
+        // Cria o HttpClient "EstoqueAPI" através da factory (ver Program.cs e
+        // o comentário no campo _httpClientFactory acima para o motivo de
+        // usarmos a factory em vez de "new HttpClient()").
+        var httpClient = _httpClientFactory.CreateClient("EstoqueAPI");
+
+        // (c) e (d) Para cada item da nota, chamamos o endpoint de baixa de
+        // saldo do Estoque.API. Envolvemos tudo em um único try/catch porque
+        // aqui é onde a comunicação entre os dois microsserviços pode falhar
+        // de duas formas bem diferentes:
+        //
+        // 1) Falha de rede/infraestrutura: o Estoque.API está fora do ar, o
+        //    container não subiu, houve timeout, DNS não resolveu "estoque-api",
+        //    etc. Isso lança uma exceção (ex: HttpRequestException) ANTES de
+        //    recebermos qualquer resposta HTTP.
+        // 2) Falha de regra de negócio: o Estoque.API respondeu normalmente,
+        //    mas com um status de erro (ex: 400 Bad Request, porque o saldo
+        //    daquele produto é insuficiente). Aqui NÃO é lançada exceção — a
+        //    chamada "deu certo" do ponto de vista de rede, só que o
+        //    resultado foi negativo. Por isso conferimos
+        //    "resposta.IsSuccessStatusCode" manualmente, e não confiamos
+        //    apenas no try/catch para detectar esse caso.
+        //
+        // Em ambos os casos, a operação inteira precisa ser CANCELADA — não
+        // continuamos para os próximos itens, e a nota NÃO é fechada. O
+        // motivo é consistência de dados: se a nota tem 3 itens e o item 2
+        // falha, não queremos deixar a nota "Fechada" com o saldo baixado só
+        // dos itens 1 e (parcialmente) 2, mas não do item 3 — isso deixaria o
+        // sistema em um estado inconsistente, difícil de auditar e corrigir
+        // depois. Preferimos parar assim que o primeiro problema aparece e
+        // devolver um erro claro para quem chamou, para que a operação possa
+        // ser tentada novamente mais tarde (com o Estoque.API já de volta, ou
+        // com o saldo já reposto).
+        //
+        // OBSERVAÇÃO IMPORTANTE (limitação conhecida): se o item 1 já tiver
+        // sido baixado com sucesso no Estoque.API e o item 2 falhar, o saldo
+        // do item 1 já foi decrementado lá e não é desfeito automaticamente
+        // aqui — não há uma "transação distribuída" entre os dois bancos de
+        // dados (cada microsserviço tem o seu). Resolver isso completamente
+        // exigiria um mecanismo de compensação (padrão Saga, por exemplo: uma
+        // chamada de "estorno" ao Estoque.API para cada baixa já aplicada).
+        // Isso está fora do escopo deste teste, mas é importante saber que
+        // esse é o próximo passo natural em um cenário de produção real.
+        try
+        {
+            foreach (var item in notaFiscal.Itens)
+            {
+                // PutAsJsonAsync serializa o objeto anônimo para JSON
+                // automaticamente (equivalente a { "quantidade": item.Quantidade })
+                // e faz o PUT para "api/produtos/{ProdutoId}/baixar-saldo",
+                // resolvido contra a BaseAddress configurada em Program.cs
+                // ("http://estoque-api:8080/").
+                var resposta = await httpClient.PutAsJsonAsync(
+                    $"api/produtos/{item.ProdutoId}/baixar-saldo",
+                    new { quantidade = item.Quantidade });
+
+                // Se o Estoque.API respondeu com um status de erro (4xx/5xx),
+                // não lançamos exceção — precisamos checar isso explicitamente.
+                // O caso mais comum aqui é 400 Bad Request por saldo
+                // insuficiente daquele produto.
+                if (!resposta.IsSuccessStatusCode)
+                {
+                    var detalhe = await resposta.Content.ReadAsStringAsync();
+
+                    return BadRequest(
+                        $"Não foi possível processar a nota fiscal: o Estoque.API recusou a baixa " +
+                        $"do produto {item.ProdutoId} (status {(int)resposta.StatusCode}). Detalhe: {detalhe}");
+                }
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            // Aqui caímos quando a chamada nem chegou a receber uma resposta
+            // HTTP válida — tipicamente porque o Estoque.API está fora do ar,
+            // inacessível na rede do Docker, ou demorou demais para responder.
+            // 502 Bad Gateway é o código correto nesse cenário: ele significa
+            // "eu (Faturamento.API), agindo como intermediário, tentei falar
+            // com outro serviço para completar seu pedido, e esse outro
+            // serviço não respondeu corretamente" — diferente de um erro
+            // interno do próprio Faturamento.API (que seria 500).
+            return StatusCode(StatusCodes.Status502BadGateway,
+                $"Não foi possível processar a nota fiscal porque o serviço de estoque está indisponível no momento. Detalhe técnico: {ex.Message}");
+        }
+
+        // (e) Só chegamos até aqui se TODAS as baixas de saldo foram
+        // bem-sucedidas (nenhum item causou "return" ou exceção lá em cima).
+        // Nesse ponto é seguro fechar a nota fiscal.
+        notaFiscal.Status = "Fechada";
+
+        await _context.SaveChangesAsync();
+
+        return Ok(notaFiscal);
     }
 }
