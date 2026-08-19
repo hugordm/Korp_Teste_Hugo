@@ -1,0 +1,103 @@
+# Versão da sintaxe do docker-compose.yml que estamos usando.
+version: "3.9"
+
+# "services" lista cada container que faz parte da aplicação.
+# O docker-compose cria uma rede interna própria e registra cada serviço
+# com um nome de host igual ao nome do serviço (ex: "postgres"), por isso
+# as connection strings dos projetos apontam para "Host=postgres".
+services:
+
+  # ===== Banco de dados =====
+  postgres:
+    # Usa a imagem oficial do PostgreSQL na versão 16, já pronta no Docker Hub
+    # (não precisa de Dockerfile próprio, por isso não usamos "build" aqui).
+    image: postgres:16
+
+    # Nome fixo do container, só para facilitar identificar em "docker ps".
+    container_name: korp_postgres
+
+    # Variáveis de ambiente que a imagem oficial do Postgres usa para
+    # se configurar sozinha na primeira vez que sobe.
+    environment:
+      POSTGRES_USER: postgres          # usuário administrador do banco
+      POSTGRES_PASSWORD: postgres123   # senha desse usuário
+      POSTGRES_DB: korp_notas          # banco de dados criado automaticamente no primeiro start
+
+    # Mapeia a porta 5433 da sua máquina para a porta 5432 dentro do container
+    # (formato "porta_da_maquina:porta_do_container"). A porta interna
+    # continua 5432 (é nela que o Postgres escuta e é isso que os outros
+    # containers usam via "Host=postgres;Port=5432"); só a porta externa
+    # mudou para 5433, então para conectar da sua máquina (ex: DBeaver,
+    # pgAdmin) o endereço agora é "localhost:5433".
+    ports:
+      - "5433:5432"
+
+    # Volume nomeado que guarda os arquivos físicos do banco de dados fora
+    # do container. Sem isso, todo dado seria perdido quando o container
+    # fosse removido (ex: "docker-compose down"). Com o volume, os dados
+    # persistem entre reinicializações.
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    # Reinicia o container automaticamente se ele cair, exceto se você
+    # mesmo parar/derrubar ele manualmente.
+    restart: unless-stopped
+
+  # ===== API de Estoque =====
+  estoque-api:
+    # Em vez de usar uma imagem pronta, manda o Docker construir a imagem
+    # a partir do Dockerfile que está dentro da pasta Estoque.API.
+    build:
+      context: ./Estoque.API
+      dockerfile: Dockerfile
+
+    container_name: korp_estoque_api
+
+    # Mapeia a porta 5001 da sua máquina para a porta 8080 de dentro do
+    # container (é a porta onde o Kestrel está escutando, configurada no
+    # Dockerfile via ASPNETCORE_URLS). Ou seja: você acessa a API em
+    # http://localhost:5001 e ela responde internamente na 8080.
+    ports:
+      - "5001:8080"
+
+    # Garante que o container do Postgres suba antes deste. Importante:
+    # isso só espera o container do Postgres "existir/iniciar", não
+    # necessariamente estar 100% pronto para aceitar conexões — por isso
+    # o EF Core / Npgsql deve lidar com tentativas de reconexão se precisar.
+    depends_on:
+      - postgres
+
+    # Define o ambiente de execução do ASP.NET Core como Development,
+    # o que habilita coisas como o Swagger UI.
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+
+    restart: unless-stopped
+
+  # ===== API de Faturamento =====
+  faturamento-api:
+    # Constrói a imagem a partir do Dockerfile dentro da pasta Faturamento.API.
+    build:
+      context: ./Faturamento.API
+      dockerfile: Dockerfile
+
+    container_name: korp_faturamento_api
+
+    # Mapeia a porta 5002 da sua máquina para a porta 8080 do container.
+    # Você acessa essa API em http://localhost:5002.
+    ports:
+      - "5002:8080"
+
+    depends_on:
+      - postgres
+
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+
+    restart: unless-stopped
+
+# "volumes" declara os volumes nomeados usados pelos serviços acima.
+# O Docker gerencia esse volume e guarda os dados do Postgres em disco,
+# fora do ciclo de vida dos containers.
+volumes:
+  postgres_data:
