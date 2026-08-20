@@ -39,7 +39,10 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("PermitirAngular", policy =>
     {
-        policy.WithOrigins("http://localhost:4200")
+        policy.WithOrigins(
+                "http://localhost:4200",
+                "https://korp-teste-hugo.vercel.app"
+              )
               .AllowAnyMethod()
               .AllowAnyHeader();
     });
