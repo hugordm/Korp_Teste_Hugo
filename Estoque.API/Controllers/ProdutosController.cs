@@ -2,6 +2,8 @@ using Estoque.API.Data;
 using Estoque.API.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Net.Http.Json;
+using System.Text.Json.Serialization;
 
 namespace Estoque.API.Controllers;
 
@@ -20,14 +22,30 @@ public class ProdutosController : ControllerBase
     // a instância do DbContext que este controller vai usar para falar com o banco.
     private readonly EstoqueDbContext _context;
 
+    // IHttpClientFactory é o serviço que sabe criar HttpClients "geridos"
+    // pelo framework a partir dos registros feitos em Program.cs — aqui,
+    // usado para pegar o HttpClient "AnthropicAPI" na hora de chamar a API
+    // da Anthropic no endpoint de geração de descrição.
+    private readonly IHttpClientFactory _httpClientFactory;
+
+    // Chave da API da Anthropic, lida da configuração (que inclui variáveis
+    // de ambiente automaticamente — ver comentário em Program.cs sobre
+    // ANTHROPIC_API_KEY). Guardada aqui no construtor para não precisar
+    // reler a configuração a cada requisição.
+    private readonly string? _anthropicApiKey;
+
     // Construtor do controller. O ASP.NET Core usa Injeção de Dependência (DI):
     // como registramos "builder.Services.AddDbContext<EstoqueDbContext>(...)" no
     // Program.cs, o framework cria automaticamente um EstoqueDbContext e o passa
     // aqui sempre que uma requisição chega para este controller — não precisamos
-    // instanciar o DbContext manualmente com "new".
-    public ProdutosController(EstoqueDbContext context)
+    // instanciar o DbContext manualmente com "new". O mesmo vale para
+    // IHttpClientFactory (registrado automaticamente por AddHttpClient) e
+    // IConfiguration (sempre disponível para injeção no ASP.NET Core).
+    public ProdutosController(EstoqueDbContext context, IHttpClientFactory httpClientFactory, IConfiguration configuration)
     {
         _context = context;
+        _httpClientFactory = httpClientFactory;
+        _anthropicApiKey = configuration["ANTHROPIC_API_KEY"] ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
     }
 
     // [HttpGet] marca este método para responder a requisições GET.
@@ -186,6 +204,124 @@ public class ProdutosController : ControllerBase
         // corpo de resposta a devolver.
         return NoContent();
     }
+
+    // [HttpPost("gerar-descricao")] atende "POST /api/produtos/gerar-descricao".
+    //
+    // Este endpoint existe para o Angular NUNCA precisar falar diretamente
+    // com a API da Anthropic (api.anthropic.com). O fluxo é:
+    //   Angular --(código + nomeBase)--> Estoque.API --(chave da API)--> Anthropic
+    // O Estoque.API funciona como um "proxy seguro": é ele quem guarda a
+    // chave da Anthropic (lida do ambiente/servidor, nunca enviada ao
+    // navegador) e quem efetivamente inclui essa chave na requisição. Se o
+    // Angular chamasse a Anthropic diretamente, a chave teria que estar em
+    // algum lugar do código JavaScript entregue ao navegador — e qualquer
+    // usuário poderia abrir o DevTools e copiá-la, o que exporia a chave
+    // publicamente (e o consumo/custo associado a ela).
+    [HttpPost("gerar-descricao")]
+    public async Task<IActionResult> GerarDescricao(GerarDescricaoRequest request)
+    {
+        // Sem a chave configurada, nem tentamos chamar a Anthropic — devolvemos
+        // logo um 500 com uma mensagem clara, em vez de deixar a requisição
+        // falhar de forma confusa mais adiante.
+        if (string.IsNullOrWhiteSpace(_anthropicApiKey))
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                "A geração de descrição por IA não está disponível: a chave da API da Anthropic (ANTHROPIC_API_KEY) não foi configurada no servidor.");
+        }
+
+        var httpClient = _httpClientFactory.CreateClient("AnthropicAPI");
+
+        var prompt = $"Gere uma descrição curta e comercial (max 15 palavras) para um produto de código {request.Codigo} e nome base '{request.NomeBase}'. Responda APENAS com a descrição, sem explicações.";
+
+        // Corpo da requisição no formato esperado pela API "Messages" da
+        // Anthropic (POST /v1/messages). "model", "max_tokens" e "messages"
+        // são os campos exigidos pela API; "role: user" indica que este é o
+        // conteúdo enviado pelo usuário (e não uma resposta do assistente).
+        var corpoRequisicao = new
+        {
+            model = "claude-haiku-4-5-20251001",
+            max_tokens = 100,
+            messages = new[]
+            {
+                new { role = "user", content = prompt }
+            }
+        };
+
+        try
+        {
+            // Montamos a requisição manualmente (em vez de PostAsJsonAsync)
+            // porque precisamos adicionar o header "x-api-key" com a chave —
+            // esse header não faz parte da configuração padrão do
+            // HttpClient "AnthropicAPI" em Program.cs porque a chave só é
+            // conhecida aqui, via configuração/injeção de dependência.
+            var mensagemRequisicao = new HttpRequestMessage(HttpMethod.Post, "v1/messages")
+            {
+                Content = JsonContent.Create(corpoRequisicao)
+            };
+            mensagemRequisicao.Headers.Add("x-api-key", _anthropicApiKey);
+
+            var resposta = await httpClient.SendAsync(mensagemRequisicao);
+
+            if (!resposta.IsSuccessStatusCode)
+            {
+                var detalhe = await resposta.Content.ReadAsStringAsync();
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    $"A API da Anthropic recusou a requisição (status {(int)resposta.StatusCode}). Detalhe: {detalhe}");
+            }
+
+            var corpoResposta = await resposta.Content.ReadFromJsonAsync<AnthropicMessageResponse>();
+
+            // A resposta da Anthropic traz o texto gerado em
+            // "content[0].text". Usamos FirstOrDefault por segurança: se a
+            // lista vier vazia por algum motivo, evitamos uma exceção de
+            // índice fora do intervalo e caímos no tratamento de erro
+            // abaixo.
+            var descricao = corpoResposta?.Content?.FirstOrDefault()?.Text?.Trim();
+
+            if (string.IsNullOrWhiteSpace(descricao))
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    "A API da Anthropic respondeu, mas sem nenhum texto de descrição.");
+            }
+
+            return Ok(new { descricao });
+        }
+        catch (HttpRequestException ex)
+        {
+            // Falha de rede/infraestrutura ao tentar contatar a Anthropic
+            // (timeout, DNS, serviço fora do ar etc.) — nenhuma resposta
+            // HTTP válida chegou a ser recebida.
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                $"Não foi possível contatar a API da Anthropic no momento. Detalhe técnico: {ex.Message}");
+        }
+    }
+}
+
+// DTO usado para receber o corpo do endpoint "gerar-descricao":
+// { "codigo": "...", "nomeBase": "..." }.
+public class GerarDescricaoRequest
+{
+    public string Codigo { get; set; } = string.Empty;
+    public string NomeBase { get; set; } = string.Empty;
+}
+
+// Classes usadas só para desserializar a resposta da API "Messages" da
+// Anthropic. Modelamos apenas os campos que realmente usamos (o texto
+// gerado) — a resposta completa da Anthropic tem outros campos (id, model,
+// usage, stop_reason etc.) que não precisamos ler aqui.
+public class AnthropicMessageResponse
+{
+    [JsonPropertyName("content")]
+    public List<AnthropicContentBlock> Content { get; set; } = new();
+}
+
+public class AnthropicContentBlock
+{
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = string.Empty;
+
+    [JsonPropertyName("text")]
+    public string Text { get; set; } = string.Empty;
 }
 
 // DTO (Data Transfer Object) simples usado só para representar o corpo (body)

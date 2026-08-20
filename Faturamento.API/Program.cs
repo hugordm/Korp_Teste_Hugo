@@ -92,6 +92,36 @@ builder.Services.AddCors(options =>
     });
 });
 
+// Registra um HttpClient "nomeado" para chamar a API da Anthropic (Claude),
+// usada pelo endpoint de validação informativa de notas fiscais e pelo
+// chatbot de suporte. Assim como o "EstoqueAPI" registrado acima, este
+// Faturamento.API atua como "proxy seguro" entre o Angular e a Anthropic —
+// o navegador nunca vê a chave da API, só fala com este backend, que é
+// quem de fato inclui a chave (lida do ambiente, nunca do código-fonte) em
+// cada requisição a api.anthropic.com.
+builder.Services.AddHttpClient("AnthropicAPI", client =>
+{
+    client.BaseAddress = new Uri("https://api.anthropic.com/");
+    client.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
+});
+
+// Lê a chave da API da Anthropic a partir da variável de ambiente
+// ANTHROPIC_API_KEY. builder.Configuration já inclui automaticamente as
+// variáveis de ambiente do processo como fonte de configuração — em
+// produção/Docker, essa variável é injetada pelo docker-compose.yml a
+// partir do arquivo ".env" na raiz do repositório (nunca commitado); o
+// fallback com Environment.GetEnvironmentVariable cobre rodar a API fora
+// do Docker. Só avisamos no log se estiver faltando: a validação por IA e
+// o chat são recursos adicionais/opcionais, não regra de negócio
+// obrigatória (imprimir nota continua funcionando sem isso).
+var anthropicApiKey = builder.Configuration["ANTHROPIC_API_KEY"]
+    ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
+
+if (string.IsNullOrWhiteSpace(anthropicApiKey))
+{
+    Console.WriteLine("[AVISO] ANTHROPIC_API_KEY não configurada — os endpoints de validação por IA e chat vão usar as respostas de fallback até isso ser definido no .env.");
+}
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

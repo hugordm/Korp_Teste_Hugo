@@ -3,6 +3,7 @@ using Faturamento.API.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Net.Http.Json;
+using System.Text.Json.Serialization;
 
 namespace Faturamento.API.Controllers;
 
@@ -30,6 +31,11 @@ public class NotasFiscaisController : ControllerBase
     // panos e evitar o esgotamento de sockets mencionado em Program.cs.
     private readonly IHttpClientFactory _httpClientFactory;
 
+    // Chave da API da Anthropic, lida da configuração (que inclui variáveis
+    // de ambiente automaticamente — ver comentário em Program.cs sobre
+    // ANTHROPIC_API_KEY). Usada pelo endpoint "validar" abaixo.
+    private readonly string? _anthropicApiKey;
+
     // Construtor do controller. O ASP.NET Core usa Injeção de Dependência (DI):
     // como o FaturamentoDbContext já está registrado em Program.cs
     // ("builder.Services.AddDbContext<FaturamentoDbContext>(...)"), o framework
@@ -37,11 +43,13 @@ public class NotasFiscaisController : ControllerBase
     // requisição chega para este controller — não precisamos instanciar o
     // DbContext manualmente com "new". O mesmo vale para o IHttpClientFactory,
     // que é registrado automaticamente pelo framework assim que chamamos
-    // "builder.Services.AddHttpClient(...)" em Program.cs.
-    public NotasFiscaisController(FaturamentoDbContext context, IHttpClientFactory httpClientFactory)
+    // "builder.Services.AddHttpClient(...)" em Program.cs, e para
+    // IConfiguration, sempre disponível para injeção no ASP.NET Core.
+    public NotasFiscaisController(FaturamentoDbContext context, IHttpClientFactory httpClientFactory, IConfiguration configuration)
     {
         _context = context;
         _httpClientFactory = httpClientFactory;
+        _anthropicApiKey = configuration["ANTHROPIC_API_KEY"] ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
     }
 
     // [HttpGet] marca este método para responder a requisições GET.
@@ -277,5 +285,97 @@ public class NotasFiscaisController : ControllerBase
         await _context.SaveChangesAsync();
 
         return Ok(notaFiscal);
+    }
+
+    // [HttpPost("{id}/validar")] atende "POST /api/notasfiscais/5/validar".
+    //
+    // IMPORTANTE: esta validação é só INFORMATIVA/opcional — um recurso
+    // extra que dá um alerta rápido usando IA (ex: "essa quantidade parece
+    // alta"), mas NÃO faz parte da regra de negócio obrigatória para
+    // imprimir/fechar uma nota. A regra de negócio real (nota precisa estar
+    // "Aberta", saldo suficiente no Estoque.API etc.) continua inteiramente
+    // no endpoint "imprimir" acima, e não é afetada por este endpoint de
+    // forma alguma — o usuário pode chamar "imprimir" sem nunca ter chamado
+    // "validar", e o front-end não deve bloquear a impressão esperando ou
+    // exigindo uma resposta daqui.
+    [HttpPost("{id}/validar")]
+    public async Task<ActionResult<object>> ValidarNotaFiscal(int id)
+    {
+        var notaFiscal = await _context.NotasFiscais
+            .Include(n => n.Itens)
+            .FirstOrDefaultAsync(n => n.Id == id);
+
+        if (notaFiscal == null)
+        {
+            return NotFound();
+        }
+
+        // Sem chave configurada, nem tentamos chamar a Anthropic. Como este
+        // é um recurso não crítico, devolvemos uma análise de fallback com
+        // 200 OK em vez de um erro — o front-end pode exibir essa mensagem
+        // normalmente, sem tratar isso como falha.
+        if (string.IsNullOrWhiteSpace(_anthropicApiKey))
+        {
+            return Ok(new { analise = "Não foi possível validar com IA no momento." });
+        }
+
+        // Monta um resumo simples dos itens (produtoId e quantidade de cada
+        // um) para mandar no prompt — não precisamos enviar a nota inteira,
+        // só o suficiente para a IA avaliar se algo parece fora do comum.
+        var resumo = string.Join(
+            "; ",
+            notaFiscal.Itens.Select(item => $"produtoId {item.ProdutoId}, quantidade {item.Quantidade}"));
+
+        var prompt = $"Analise esta nota fiscal com os seguintes itens: {resumo}. Aponte de forma BREVE (max 20 palavras) se algo parece incomum (ex: quantidade muito alta) ou responda 'Nota fiscal parece consistente' se estiver tudo normal. Responda APENAS com a análise.";
+
+        var corpoRequisicao = new
+        {
+            model = "claude-haiku-4-5-20251001",
+            max_tokens = 100,
+            messages = new[]
+            {
+                new { role = "user", content = prompt }
+            }
+        };
+
+        try
+        {
+            var httpClient = _httpClientFactory.CreateClient("AnthropicAPI");
+
+            var mensagemRequisicao = new HttpRequestMessage(HttpMethod.Post, "v1/messages")
+            {
+                Content = JsonContent.Create(corpoRequisicao)
+            };
+            mensagemRequisicao.Headers.Add("x-api-key", _anthropicApiKey);
+
+            var resposta = await httpClient.SendAsync(mensagemRequisicao);
+
+            if (!resposta.IsSuccessStatusCode)
+            {
+                // Falha de regra/limite na própria Anthropic (ex: 400, 429).
+                // Como este recurso é opcional, não propagamos o erro para o
+                // cliente — só devolvemos a mensagem de fallback, para não
+                // atrapalhar quem só queria ver a nota na tela.
+                return Ok(new { analise = "Não foi possível validar com IA no momento." });
+            }
+
+            var corpoResposta = await resposta.Content.ReadFromJsonAsync<AnthropicMessageResponse>();
+            var analise = corpoResposta?.Content?.FirstOrDefault()?.Text?.Trim();
+
+            if (string.IsNullOrWhiteSpace(analise))
+            {
+                return Ok(new { analise = "Não foi possível validar com IA no momento." });
+            }
+
+            return Ok(new { analise });
+        }
+        catch (HttpRequestException)
+        {
+            // Falha de rede/infraestrutura ao contatar a Anthropic (timeout,
+            // serviço fora do ar etc.) — de novo, tratada como fallback e
+            // não como erro, pelo mesmo motivo: isso é só um alerta extra,
+            // não deve derrubar nem bloquear o fluxo de imprimir a nota.
+            return Ok(new { analise = "Não foi possível validar com IA no momento." });
+        }
     }
 }

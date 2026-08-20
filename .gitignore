@@ -1,0 +1,26 @@
+# Variáveis de ambiente: o .env real contém segredos (ex: ANTHROPIC_API_KEY)
+# e nunca deve ser commitado. O .env.example (sem extensão extra aqui na
+# frente do nome) NÃO bate neste padrão de propósito, então ele continua
+# indo para o Git normalmente, como referência para outros desenvolvedores.
+.env
+
+# .NET (Estoque.API, Faturamento.API)
+bin/
+obj/
+
+# appsettings.Development.json costuma acumular configuração local de
+# desenvolvimento (e, no passado deste projeto, chegou a ser cogitado para
+# guardar a chave da Anthropic) — mantido fora do Git por segurança, mesmo
+# não guardando segredos nele hoje.
+appsettings.Development.json
+
+# Node / Angular (frontend/) — o projeto já tem seu próprio .gitignore mais
+# detalhado em frontend/.gitignore; estas entradas aqui são só uma rede de
+# segurança adicional caso algum comando rode a partir da raiz.
+node_modules/
+dist/
+
+# IDEs / SO
+.vs/
+.idea/
+.DS_Store

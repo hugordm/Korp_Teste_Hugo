@@ -69,8 +69,13 @@ services:
 
     # Define o ambiente de execução do ASP.NET Core como Development,
     # o que habilita coisas como o Swagger UI.
+    # ANTHROPIC_API_KEY vem do arquivo ".env" na raiz (lido automaticamente
+    # pelo Docker Compose) — "${ANTHROPIC_API_KEY}" substitui pelo valor
+    # daquele arquivo na hora de subir o container. Assim a chave nunca
+    # precisa ser escrita aqui no docker-compose.yml (que vai pro Git).
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
 
     restart: unless-stopped
 
@@ -93,6 +98,7 @@ services:
 
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
 
     restart: unless-stopped
 

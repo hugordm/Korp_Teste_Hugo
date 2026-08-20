@@ -45,6 +45,39 @@ builder.Services.AddCors(options =>
     });
 });
 
+// Registra um HttpClient "nomeado" (via IHttpClientFactory) para chamar a
+// API da Anthropic (Claude), usada pelo endpoint de geração automática de
+// descrição de produto. O ProdutosController atua como um "proxy seguro"
+// entre o Angular e a Anthropic: o navegador nunca fala diretamente com
+// api.anthropic.com nem vê a chave da API — ele só chama este backend, que
+// é quem de fato inclui a chave (guardada aqui no servidor) na requisição.
+// Se a chave fosse usada direto do Angular, qualquer usuário poderia abrir
+// o DevTools do navegador e roubá-la.
+builder.Services.AddHttpClient("AnthropicAPI", client =>
+{
+    client.BaseAddress = new Uri("https://api.anthropic.com/");
+    client.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
+});
+
+// Lê a chave da API da Anthropic a partir da variável de ambiente
+// ANTHROPIC_API_KEY. builder.Configuration já inclui automaticamente as
+// variáveis de ambiente do processo como fonte de configuração — em
+// produção/Docker, essa variável é injetada pelo docker-compose.yml a
+// partir do arquivo ".env" na raiz do repositório (nunca commitado); o
+// fallback com Environment.GetEnvironmentVariable cobre rodar a API fora
+// do Docker (ex: "dotnet run" direto, com a variável exportada no shell).
+// Só avisamos no log se estiver faltando (em vez de derrubar a API inteira
+// na inicialização) porque essa integração é um recurso adicional — o
+// cadastro de produtos continua funcionando normalmente sem ela; só o
+// endpoint de gerar descrição por IA que vai falhar.
+var anthropicApiKey = builder.Configuration["ANTHROPIC_API_KEY"]
+    ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
+
+if (string.IsNullOrWhiteSpace(anthropicApiKey))
+{
+    Console.WriteLine("[AVISO] ANTHROPIC_API_KEY não configurada — o endpoint de geração de descrição por IA vai falhar até isso ser definido no .env.");
+}
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
