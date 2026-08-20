@@ -81,11 +81,16 @@ if (string.IsNullOrWhiteSpace(anthropicApiKey))
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+// Decisão consciente: normalmente o Swagger fica restrito a
+// app.Environment.IsDevelopment(), por segurança — expor a documentação
+// completa da API (todas as rotas, modelos de request/response) publicamente
+// em produção facilita o trabalho de quem for tentar explorar a API de forma
+// indevida. Aqui removemos essa restrição de propósito, porque este projeto
+// é um teste técnico/demonstração (deploy no Render): o objetivo é que
+// qualquer avaliador consiga abrir o Swagger em produção sem precisar rodar
+// a aplicação localmente.
+app.UseSwagger();
+app.UseSwaggerUI();
 
 app.UseHttpsRedirection();
 
