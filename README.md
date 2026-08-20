@@ -190,7 +190,3 @@ Korp_Teste_Hugo/
     ├── angular.json
     └── package.json
 ```
-
-## Vídeo de apresentação
-
-[Link do vídeo aqui]
