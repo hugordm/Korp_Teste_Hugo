@@ -1,10 +1,31 @@
-<!-- Barra de navegação fixa no topo. Por enquanto só exibe o título do
-     sistema; a estrutura (flex + gap) já deixa espaço pronto para no futuro
-     receber links de navegação (ex: Produtos | Notas Fiscais) ao lado do
-     título, sem precisar refazer o layout. -->
+<!-- Barra de navegação fixa no topo: título do sistema + links entre as
+     telas principais (Produtos e Notas Fiscais). -->
 <header class="sticky top-0 z-20 border-b border-gray-200 bg-white">
   <div class="mx-auto flex max-w-5xl items-center gap-6 px-6 py-4">
     <h1 class="text-lg font-semibold text-gray-900 sm:text-xl">KORP - Sistema de Notas Fiscais</h1>
+
+    <!-- routerLinkActive aplica automaticamente uma classe CSS ao elemento
+         quando a rota associada ao routerLink daquele link está ativa (ou
+         seja, quando a URL atual corresponde a ela) — sem precisar comparar
+         a URL manualmente no componente. Aqui usamos isso para destacar em
+         negrito/indigo o link da tela em que o usuário está no momento,
+         reforçando visualmente onde ele se encontra na navegação. -->
+    <nav class="flex items-center gap-4 text-sm font-medium">
+      <a
+        routerLink="/produtos"
+        routerLinkActive="text-indigo-600"
+        class="text-gray-600 transition-colors hover:text-gray-900"
+      >
+        Produtos
+      </a>
+      <a
+        routerLink="/notas"
+        routerLinkActive="text-indigo-600"
+        class="text-gray-600 transition-colors hover:text-gray-900"
+      >
+        Notas Fiscais
+      </a>
+    </nav>
   </div>
 </header>
 

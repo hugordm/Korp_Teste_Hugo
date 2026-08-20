@@ -1,0 +1,164 @@
+<div class="min-h-screen bg-gray-50">
+  <!-- Header fixo no topo: título da tela + ação principal (criar nota). -->
+  <header class="sticky top-0 z-10 border-b border-gray-200 bg-white">
+    <div class="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
+      <h1 class="text-xl font-semibold tracking-tight text-gray-900 sm:text-2xl">Notas Fiscais</h1>
+
+      <a
+        routerLink="/notas/novo"
+        class="flex min-h-11 items-center justify-center rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700"
+      >
+        + Nova Nota Fiscal
+      </a>
+    </div>
+  </header>
+
+  @if (erro(); as mensagem) {
+    <!-- Banner de erro: aparece quando notaFiscalService.imprimir() falha
+         (ex: nota já fechada, ou falha ao contatar o Estoque.API para dar
+         baixa no saldo). Some sozinho depois de alguns segundos (ver
+         mostrarErro() no componente), mas também pode ser fechado na hora
+         pelo botão "×", para o usuário não precisar esperar. -->
+    <div class="mx-auto mt-4 max-w-5xl px-4 sm:px-6">
+      <div class="flex items-start justify-between gap-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 shadow-sm">
+        <p>{{ mensagem }}</p>
+        <button
+          type="button"
+          (click)="fecharErro()"
+          class="shrink-0 font-medium text-red-700 hover:text-red-900"
+          aria-label="Fechar aviso de erro"
+        >
+          ×
+        </button>
+      </div>
+    </div>
+  }
+
+  <main class="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+    @if (notas().length === 0) {
+      <!-- Estado vazio: nenhuma nota fiscal cadastrada ainda. -->
+      <div class="flex flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 bg-white px-6 py-16 text-center shadow-sm">
+        <svg
+          class="h-12 w-12 text-gray-300"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke-width="1.5"
+          stroke="currentColor"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2Z"
+          />
+        </svg>
+        <p class="mt-4 text-base font-medium text-gray-900">Nenhuma nota fiscal cadastrada</p>
+        <p class="mt-1 text-sm text-gray-500">Comece cadastrando a primeira nota fiscal.</p>
+        <a
+          routerLink="/notas/novo"
+          class="mt-6 flex min-h-11 items-center justify-center rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700"
+        >
+          + Nova Nota Fiscal
+        </a>
+      </div>
+    } @else {
+      <!-- ===== Desktop (md e acima): tabela tradicional ===== -->
+      <div class="hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm md:block">
+        <table class="min-w-full divide-y divide-gray-100">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Número</th>
+              <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Status</th>
+              <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Data de Criação</th>
+              <th class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wide text-gray-500">Qtde. de Itens</th>
+              <th class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wide text-gray-500">Ações</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            @for (nota of notas(); track nota.id) {
+              <tr class="transition-colors hover:bg-gray-50">
+                <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">{{ nota.numero }}</td>
+                <td class="whitespace-nowrap px-6 py-4 text-sm">
+                  @if (nota.status === 'Fechada') {
+                    <span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700">
+                      Fechada
+                    </span>
+                  } @else {
+                    <span class="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700">
+                      Aberta
+                    </span>
+                  }
+                </td>
+                <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
+                  {{ nota.dataCriacao | date: 'dd/MM/yyyy HH:mm' }}
+                </td>
+                <td class="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-900">{{ nota.itens.length }}</td>
+                <td class="whitespace-nowrap px-6 py-4 text-right text-sm">
+                  <!-- O botão "Imprimir" só aparece ativo quando a nota está
+                       "Aberta". O backend também recusa (400) imprimir uma
+                       nota que já está "Fechada" — essa condição aqui não
+                       substitui aquela validação, só reforça visualmente a
+                       mesma regra de negócio, evitando que o usuário clique
+                       num botão que o servidor rejeitaria de qualquer forma. -->
+                  @if (nota.status === 'Aberta') {
+                    <button
+                      type="button"
+                      (click)="imprimir(nota.id)"
+                      class="font-medium text-indigo-600 hover:text-indigo-800"
+                    >
+                      Imprimir
+                    </button>
+                  } @else {
+                    <span class="text-gray-400">Já impressa</span>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ===== Mobile (abaixo de md): lista de cards empilhados ===== -->
+      <ul class="flex flex-col gap-3 md:hidden">
+        @for (nota of notas(); track nota.id) {
+          <li class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="truncate text-base font-semibold text-gray-900">Nota #{{ nota.numero }}</p>
+                <p class="mt-0.5 truncate text-sm text-gray-500">
+                  {{ nota.dataCriacao | date: 'dd/MM/yyyy HH:mm' }}
+                </p>
+              </div>
+              @if (nota.status === 'Fechada') {
+                <span class="shrink-0 inline-flex items-center rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700">
+                  Fechada
+                </span>
+              } @else {
+                <span class="shrink-0 inline-flex items-center rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700">
+                  Aberta
+                </span>
+              }
+            </div>
+
+            <p class="mt-3 text-sm text-gray-600">{{ nota.itens.length }} item(ns)</p>
+
+            <div class="mt-4 flex gap-2">
+              @if (nota.status === 'Aberta') {
+                <button
+                  type="button"
+                  (click)="imprimir(nota.id)"
+                  class="flex min-h-11 flex-1 items-center justify-center rounded-lg bg-indigo-50 px-4 py-2.5 text-sm font-medium text-indigo-600 transition-colors hover:bg-indigo-100"
+                >
+                  Imprimir
+                </button>
+              } @else {
+                <span class="flex min-h-11 flex-1 items-center justify-center rounded-lg bg-gray-50 px-4 py-2.5 text-sm font-medium text-gray-400">
+                  Já impressa
+                </span>
+              }
+            </div>
+          </li>
+        }
+      </ul>
+    }
+  </main>
+</div>

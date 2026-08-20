@@ -43,6 +43,20 @@ export const routes: Routes = [
       )
   },
   {
+    path: 'notas',
+    loadComponent: () =>
+      import('./features/notas-fiscais/nota-list/nota-list.component').then(
+        (m) => m.NotaListComponent
+      )
+  },
+  {
+    path: 'notas/novo',
+    loadComponent: () =>
+      import('./features/notas-fiscais/nota-form/nota-form.component').then(
+        (m) => m.NotaFormComponent
+      )
+  },
+  {
     // Rota curinga (wildcard): casa com qualquer URL que não bateu com
     // nenhuma rota acima (ex: erro de digitação, link quebrado). Precisa ser
     // sempre a última rota da lista, já que o Angular avalia as rotas em
