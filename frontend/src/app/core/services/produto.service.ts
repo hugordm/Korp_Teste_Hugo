@@ -109,4 +109,16 @@ export class ProdutoService {
   baixarSaldo(id: number, quantidade: number): Observable<void> {
     return this.http.put<void>(`${this.apiUrl}/${id}/baixar-saldo`, { quantidade });
   }
+
+  // POST /api/produtos/gerar-descricao — funcionalidade opcional/bônus: pede
+  // para o backend gerar uma sugestão de descrição a partir do código e (se
+  // houver) de um nome-base já digitado. O backend (Estoque.API) é quem
+  // efetivamente fala com a API da Anthropic — o front nunca vê nem manuseia
+  // a chave de API, só chama esse endpoint como um proxy seguro.
+  gerarDescricao(codigo: string, nomeBase: string): Observable<{ descricao: string }> {
+    return this.http.post<{ descricao: string }>(`${this.apiUrl}/gerar-descricao`, {
+      codigo,
+      nomeBase
+    });
+  }
 }

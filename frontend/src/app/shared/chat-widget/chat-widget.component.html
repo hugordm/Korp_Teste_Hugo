@@ -1,0 +1,82 @@
+<!-- Janela do chat: só aparece quando "aberto()" é true. Fica ancorada acima
+     da bolinha, no canto inferior direito, com altura fixa e scroll interno
+     para o histórico não "empurrar" o layout da página. -->
+@if (aberto()) {
+  <div
+    class="fixed bottom-24 right-6 z-50 flex h-[28rem] w-[calc(100vw-3rem)] max-w-sm flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl"
+  >
+    <!-- Cabeçalho -->
+    <div class="flex items-center justify-between border-b border-gray-200 bg-indigo-600 px-4 py-3">
+      <span class="text-sm font-semibold text-white">Assistente</span>
+      <button
+        type="button"
+        (click)="alternarAberto()"
+        aria-label="Fechar chat"
+        class="rounded-md p-1 text-indigo-100 transition-colors hover:bg-indigo-700 hover:text-white"
+      >
+        ✕
+      </button>
+    </div>
+
+    <!-- Histórico de mensagens, com scroll interno -->
+    <div class="flex-1 space-y-3 overflow-y-auto px-4 py-3">
+      @if (mensagens().length === 0) {
+        <p class="mt-4 text-center text-sm text-gray-400">Envie uma mensagem para começar.</p>
+      }
+
+      @for (mensagem of mensagens(); track $index) {
+        <div class="flex" [class.justify-end]="mensagem.autor === 'usuario'">
+          <div
+            class="max-w-[80%] rounded-2xl px-3.5 py-2 text-sm"
+            [class.bg-indigo-600]="mensagem.autor === 'usuario'"
+            [class.text-white]="mensagem.autor === 'usuario'"
+            [class.bg-gray-100]="mensagem.autor === 'bot'"
+            [class.text-gray-800]="mensagem.autor === 'bot'"
+          >
+            {{ mensagem.texto }}
+          </div>
+        </div>
+      }
+
+      <!-- Indicador de "digitando..." enquanto aguardamos a resposta do bot -->
+      @if (carregando()) {
+        <div class="flex">
+          <div class="max-w-[80%] rounded-2xl bg-gray-100 px-3.5 py-2 text-sm text-gray-500">
+            Digitando...
+          </div>
+        </div>
+      }
+    </div>
+
+    <!-- Input + botão de enviar -->
+    <form (ngSubmit)="enviar()" class="flex items-center gap-2 border-t border-gray-200 p-3">
+      <input
+        type="text"
+        name="mensagem"
+        [(ngModel)]="textoInput"
+        [disabled]="carregando()"
+        placeholder="Digite sua mensagem..."
+        autocomplete="off"
+        class="min-h-10 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 disabled:bg-gray-50"
+      />
+      <button
+        type="submit"
+        [disabled]="carregando() || !textoInput.trim()"
+        aria-label="Enviar mensagem"
+        class="flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        ➤
+      </button>
+    </form>
+  </div>
+}
+
+<!-- Bolinha flutuante: sempre visível, fixa no canto inferior direito. -->
+<button
+  type="button"
+  (click)="alternarAberto()"
+  aria-label="Abrir chat"
+  class="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 text-2xl text-white shadow-lg transition-transform hover:scale-105 hover:bg-indigo-700"
+>
+  {{ aberto() ? '✕' : '💬' }}
+</button>

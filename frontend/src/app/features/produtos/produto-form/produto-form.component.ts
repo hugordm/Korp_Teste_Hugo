@@ -42,6 +42,12 @@ export class ProdutoFormComponent implements OnInit {
   // num @if/@else.
   editando = signal<boolean>(false);
 
+  // signal<boolean> exposto ao template para controlar o estado de loading
+  // do botão opcional/bônus "Gerar com IA" (ver gerarDescricaoComIA abaixo):
+  // fica true enquanto aguardamos a resposta do backend, para desabilitar o
+  // botão e trocar o texto por "Gerando..." e evitar cliques duplicados.
+  gerandoDescricao = signal<boolean>(false);
+
   // Reactive Forms x Template-Driven Forms: no Angular existem duas formas
   // de trabalhar com formulários. No Template-Driven, o formulário é
   // definido majoritariamente no HTML (com [(ngModel)]), e o Angular cria a
@@ -71,6 +77,17 @@ export class ProdutoFormComponent implements OnInit {
     descricao: ['', Validators.required],
     saldo: [0, [Validators.required, Validators.min(0)]]
   });
+
+  // "palavraChave" fica FORA do FormGroup principal, como um FormControl
+  // separado: não é um campo do Produto (não é enviado em criar/atualizar),
+  // é só o insumo que o usuário digita para a IA saber o que descrever (ex:
+  // "Caneta azul"). Separar dos campos codigo/descricao/saldo evita que ele
+  // seja tratado como obrigatório para SALVAR o produto (Validators.required
+  // aqui só importa para gerarDescricaoComIA, não para salvar()) e evita
+  // misturar, na cabeça do usuário, "o que a IA usa como base" com "o texto
+  // final de descrição" — são conceitos diferentes, então viraram campos
+  // diferentes na tela.
+  palavraChave = this.fb.control('');
 
   ngOnInit(): void {
     const idParam = this.route.snapshot.paramMap.get('id');
@@ -127,5 +144,33 @@ export class ProdutoFormComponent implements OnInit {
 
   cancelar(): void {
     this.router.navigate(['/produtos']);
+  }
+
+  // Funcionalidade opcional/bônus: usa IA (via backend, que atua como proxy
+  // seguro para a API da Anthropic — o front nunca tem acesso à chave de
+  // API) para sugerir uma descrição a partir do código do produto e da
+  // palavra-chave digitada pelo usuário (ver comentário em "palavraChave"
+  // acima sobre por que esse é um campo separado da descrição final).
+  gerarDescricaoComIA(): void {
+    const codigo = this.form.value.codigo?.trim();
+    const nomeBase = this.palavraChave.value?.trim();
+
+    if (!codigo || !nomeBase) {
+      alert('Preencha o código e uma palavra-chave do produto antes de gerar a descrição.');
+      return;
+    }
+
+    this.gerandoDescricao.set(true);
+
+    this.produtoService.gerarDescricao(codigo, nomeBase).subscribe({
+      next: (resultado) => {
+        this.form.patchValue({ descricao: resultado.descricao });
+        this.gerandoDescricao.set(false);
+      },
+      error: () => {
+        alert('Não foi possível gerar a descrição com IA. Tente novamente.');
+        this.gerandoDescricao.set(false);
+      }
+    });
   }
 }

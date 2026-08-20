@@ -35,3 +35,8 @@
      '/produtos/novo'), o Angular remove o componente antigo daqui e renderiza
      o novo no mesmo lugar — sem essa tag, nenhuma rota apareceria na tela. -->
 <router-outlet />
+
+<!-- Chat flutuante opcional/bônus: fica fora do router-outlet de propósito,
+     para renderizar uma única vez e permanecer visível em todas as páginas,
+     independente da rota atual. -->
+<app-chat-widget />

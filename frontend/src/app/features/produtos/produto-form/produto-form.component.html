@@ -19,7 +19,39 @@
         }
       </div>
 
-      <!-- Descrição -->
+      <!-- Palavra-chave (opcional/bônus): insumo separado do campo de
+           Descrição final, usado só como base para a IA gerar uma sugestão.
+           Manter em campos distintos deixa claro para o usuário o que é "o
+           que a IA vai usar para gerar o texto" (palavra-chave) e o que é
+           "o texto final que vai ser salvo no produto" (descrição) — em vez
+           de confundir os dois num único campo. -->
+      <div>
+        <label for="palavraChave" class="mb-1.5 block text-sm font-medium text-gray-700">
+          Palavra-chave (para gerar descrição)
+        </label>
+        <input
+          id="palavraChave"
+          type="text"
+          [formControl]="palavraChave"
+          placeholder="ex: Caderno, Caneta azul, Mouse sem fio"
+          class="min-h-11 w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+        />
+        <!-- Botão opcional/bônus: pede ao backend (proxy seguro para a API
+             da Anthropic, sem expor a chave de API no front) uma sugestão de
+             descrição a partir do código e da palavra-chave acima. -->
+        <button
+          type="button"
+          (click)="gerarDescricaoComIA()"
+          [disabled]="gerandoDescricao()"
+          class="mt-2 min-h-11 w-full whitespace-nowrap rounded-lg border border-indigo-200 bg-indigo-50 px-3.5 text-sm font-medium text-indigo-700 transition-colors hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {{ gerandoDescricao() ? 'Gerando...' : '✨ Gerar com IA' }}
+        </button>
+      </div>
+
+      <!-- Descrição: continua editável manualmente e também é preenchida
+           automaticamente quando a IA gera o texto (ver gerarDescricaoComIA
+           no componente). -->
       <div>
         <label for="descricao" class="mb-1.5 block text-sm font-medium text-gray-700">Descrição</label>
         <input
