@@ -11,7 +11,7 @@ import { Observable } from 'rxjs';
 export class ChatService {
   private readonly http = inject(HttpClient);
 
-  private readonly apiUrl = 'http://localhost:5002/api/chat';
+  private readonly apiUrl = 'https://korp-faturamento-api-r0gh.onrender.com/api/chat';
 
   // POST /api/chat — envia a mensagem do usuário e recebe a resposta do bot.
   enviarMensagem(mensagem: string): Observable<{ resposta: string }> {

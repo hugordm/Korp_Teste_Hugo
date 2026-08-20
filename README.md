@@ -8,7 +8,7 @@ Projeto técnico desenvolvido para o teste prático da KORP ERP: um sistema de c
 - **Back-end:** C# / .NET 8 (ASP.NET Core Web API com Controllers)
 - **Banco de dados:** PostgreSQL 16
 - **ORM:** Entity Framework Core 8 (provider Npgsql)
-- **Infraestrutura:** Docker e Docker Compose
+- **Infraestrutura:** Docker e Docker Compose (local); em produção, o banco fica hospedado no **Neon** (PostgreSQL serverless), com os mesmos schemas `estoque` e `faturamento` usados no ambiente local
 - **Documentação de API:** Swagger / OpenAPI (Swashbuckle.AspNetCore)
 - **IA:** API da Anthropic (modelo `claude-haiku-4-5-20251001`), consumida via proxy seguro no back-end
 
@@ -27,6 +27,14 @@ Os dois compartilham a **mesma instância** do PostgreSQL, mas cada um tem seu *
 - `Faturamento.API` → schema `faturamento` (tabelas `NotasFiscais` e `ItensNotaFiscal`)
 
 Essa separação por schema é lógica, não física: os dois serviços rodam contra o mesmo servidor de banco, mas **nenhum dos dois acessa as tabelas do outro diretamente**. Toda comunicação entre eles acontece exclusivamente via **HTTP**: quando uma nota fiscal é impressa, o `Faturamento.API` chama o endpoint `PUT /api/produtos/{id}/baixar-saldo` do `Estoque.API` (via `IHttpClientFactory`, usando o hostname interno do Docker `estoque-api:8080`) para dar baixa no saldo de cada item — nunca conecta direto no schema `estoque` do banco.
+
+## Aplicação em produção
+
+- **Frontend:** https://korp-teste-hugo.vercel.app
+- **Estoque.API (Swagger):** https://korp-teste-hugo.onrender.com/swagger
+- **Faturamento.API (Swagger):** https://korp-faturamento-api-r0gh.onrender.com/swagger
+
+> As APIs estão no plano gratuito do Render, que hiberna após período de inatividade — a primeira requisição após um tempo parado pode levar até 50 segundos para responder enquanto o serviço "acorda".
 
 ## Como rodar o projeto
 

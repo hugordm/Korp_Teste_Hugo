@@ -58,7 +58,7 @@ export interface NovaNotaFiscal {
 export class NotaFiscalService {
   private readonly http = inject(HttpClient);
 
-  private readonly apiUrl = 'http://localhost:5002/api/notasfiscais';
+  private readonly apiUrl = 'https://korp-faturamento-api-r0gh.onrender.com/api/notasfiscais';
 
   // GET /api/notasfiscais — lista todas as notas fiscais (já com seus itens).
   listar(): Observable<NotaFiscal[]> {

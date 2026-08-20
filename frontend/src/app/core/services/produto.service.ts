@@ -34,7 +34,7 @@ export class ProdutoService {
   // URL base da API de Estoque. Fica centralizada aqui, numa constante
   // privada, para não repetir a string em cada método abaixo — se a porta
   // ou o caminho mudar, só precisa ajustar em um lugar.
-  private readonly apiUrl = 'http://localhost:5001/api/produtos';
+  private readonly apiUrl = 'https://korp-teste-hugo.onrender.com/api/produtos';
 
   // Por que centralizar as chamadas HTTP num Service, e não fazer o
   // HttpClient direto dentro de cada componente:
