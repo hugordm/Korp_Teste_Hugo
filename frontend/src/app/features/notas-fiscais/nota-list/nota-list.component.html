@@ -1,12 +1,46 @@
 <div class="min-h-screen bg-gray-50">
+  <!-- Toast de sucesso: fica sempre no DOM (não usa @if) para que a mudança
+       de opacidade/posição vire uma transição CSS suave de entrada/saída em
+       vez de um "pop" abrupto. pointer-events-none no wrapper evita que a
+       área invisível do toast intercepte cliques quando escondido;
+       pointer-events-auto no card interno restaura o clique (ex: no botão
+       de fechar) quando ele está visível. -->
+  <div
+    class="pointer-events-none fixed right-4 top-4 z-50 flex justify-end transition-all duration-300"
+    [class.opacity-100]="mensagemSucesso() !== null"
+    [class.opacity-0]="mensagemSucesso() === null"
+    [class.translate-y-0]="mensagemSucesso() !== null"
+    [class.-translate-y-2]="mensagemSucesso() === null"
+  >
+    <div class="pointer-events-auto flex max-w-sm items-start gap-3 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700 shadow-lg">
+      <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-green-100 text-xs font-bold text-green-600">
+        ✓
+      </span>
+      <p>{{ mensagemSucesso() }}</p>
+      <button
+        type="button"
+        (click)="fecharSucesso()"
+        class="shrink-0 cursor-pointer font-medium text-green-700 hover:text-green-900"
+        aria-label="Fechar aviso de sucesso"
+      >
+        ×
+      </button>
+    </div>
+  </div>
+
   <!-- Header fixo no topo: título da tela + ação principal (criar nota). -->
   <header class="sticky top-0 z-10 border-b border-gray-200 bg-white">
     <div class="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
       <h1 class="text-xl font-semibold tracking-tight text-gray-900 sm:text-2xl">Notas Fiscais</h1>
 
+      <!-- cursor-pointer é adicionado explicitamente em todo elemento
+           clicável desta tela: o cursor padrão de <button> no navegador é a
+           seta normal, não a mãozinha, e <div>/<span> com (click) também não
+           ganham a mãozinha sozinhos — sem a classe, esses elementos
+           pareceriam não-clicáveis à primeira vista. -->
       <a
         routerLink="/notas/novo"
-        class="flex min-h-11 items-center justify-center rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700"
+        class="flex min-h-11 cursor-pointer items-center justify-center rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700"
       >
         + Nova Nota Fiscal
       </a>
@@ -25,7 +59,7 @@
         <button
           type="button"
           (click)="fecharErro()"
-          class="shrink-0 font-medium text-red-700 hover:text-red-900"
+          class="shrink-0 cursor-pointer font-medium text-red-700 hover:text-red-900"
           aria-label="Fechar aviso de erro"
         >
           ×
@@ -55,7 +89,7 @@
         <p class="mt-1 text-sm text-gray-500">Comece cadastrando a primeira nota fiscal.</p>
         <a
           routerLink="/notas/novo"
-          class="mt-6 flex min-h-11 items-center justify-center rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700"
+          class="mt-6 flex min-h-11 cursor-pointer items-center justify-center rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700"
         >
           + Nova Nota Fiscal
         </a>
@@ -93,23 +127,36 @@
                 </td>
                 <td class="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-900">{{ nota.itens.length }}</td>
                 <td class="whitespace-nowrap px-6 py-4 text-right text-sm">
-                  <!-- O botão "Imprimir" só aparece ativo quando a nota está
-                       "Aberta". O backend também recusa (400) imprimir uma
-                       nota que já está "Fechada" — essa condição aqui não
-                       substitui aquela validação, só reforça visualmente a
-                       mesma regra de negócio, evitando que o usuário clique
-                       num botão que o servidor rejeitaria de qualquer forma. -->
-                  @if (nota.status === 'Aberta') {
+                  <div class="flex items-center justify-end gap-4">
+                    <!-- O botão "Imprimir" só aparece ativo quando a nota está
+                         "Aberta". O backend também recusa (400) imprimir uma
+                         nota que já está "Fechada" — essa condição aqui não
+                         substitui aquela validação, só reforça visualmente a
+                         mesma regra de negócio, evitando que o usuário clique
+                         num botão que o servidor rejeitaria de qualquer forma. -->
+                    @if (nota.status === 'Aberta') {
+                      <button
+                        type="button"
+                        (click)="imprimir(nota.id)"
+                        class="cursor-pointer font-medium text-indigo-600 hover:text-indigo-800"
+                      >
+                        Imprimir
+                      </button>
+                    } @else {
+                      <span class="text-gray-400">Já impressa</span>
+                    }
+                    <!-- "Baixar PDF" fica disponível para qualquer nota,
+                         aberta ou fechada: geração client-side (ver
+                         baixarPdf() no componente), não depende do status
+                         nem de nenhuma chamada ao backend. -->
                     <button
                       type="button"
-                      (click)="imprimir(nota.id)"
-                      class="font-medium text-indigo-600 hover:text-indigo-800"
+                      (click)="baixarPdf(nota)"
+                      class="cursor-pointer font-medium text-gray-600 hover:text-gray-900"
                     >
-                      Imprimir
+                      Baixar PDF
                     </button>
-                  } @else {
-                    <span class="text-gray-400">Já impressa</span>
-                  }
+                  </div>
                 </td>
               </tr>
             }
@@ -146,7 +193,7 @@
                 <button
                   type="button"
                   (click)="imprimir(nota.id)"
-                  class="flex min-h-11 flex-1 items-center justify-center rounded-lg bg-indigo-50 px-4 py-2.5 text-sm font-medium text-indigo-600 transition-colors hover:bg-indigo-100"
+                  class="flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded-lg bg-indigo-50 px-4 py-2.5 text-sm font-medium text-indigo-600 transition-colors hover:bg-indigo-100"
                 >
                   Imprimir
                 </button>
@@ -155,6 +202,17 @@
                   Já impressa
                 </span>
               }
+              <!-- "Baixar PDF" fica disponível para qualquer nota, aberta ou
+                   fechada: geração client-side (ver baixarPdf() no
+                   componente), não depende do status nem de chamada ao
+                   backend. -->
+              <button
+                type="button"
+                (click)="baixarPdf(nota)"
+                class="flex min-h-11 flex-1 cursor-pointer items-center justify-center rounded-lg bg-gray-100 px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200"
+              >
+                Baixar PDF
+              </button>
             </div>
           </li>
         }

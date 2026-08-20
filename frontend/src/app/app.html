@@ -10,18 +10,23 @@
          a URL manualmente no componente. Aqui usamos isso para destacar em
          negrito/indigo o link da tela em que o usuário está no momento,
          reforçando visualmente onde ele se encontra na navegação. -->
+    <!-- cursor-pointer explícito nos dois links: apesar de <a href> já
+         ganhar o cursor de mãozinha por padrão do navegador, mantemos a
+         classe aqui também por consistência com o resto do app (onde ela é
+         obrigatória para <button> e outros elementos clicáveis, que não
+         ganham a mãozinha sozinhos). -->
     <nav class="flex items-center gap-4 text-sm font-medium">
       <a
         routerLink="/produtos"
         routerLinkActive="text-indigo-600"
-        class="text-gray-600 transition-colors hover:text-gray-900"
+        class="cursor-pointer text-gray-600 transition-colors hover:text-gray-900"
       >
         Produtos
       </a>
       <a
         routerLink="/notas"
         routerLinkActive="text-indigo-600"
-        class="text-gray-600 transition-colors hover:text-gray-900"
+        class="cursor-pointer text-gray-600 transition-colors hover:text-gray-900"
       >
         Notas Fiscais
       </a>

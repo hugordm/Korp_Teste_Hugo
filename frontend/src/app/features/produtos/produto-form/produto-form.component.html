@@ -38,12 +38,20 @@
         />
         <!-- Botão opcional/bônus: pede ao backend (proxy seguro para a API
              da Anthropic, sem expor a chave de API no front) uma sugestão de
-             descrição a partir do código e da palavra-chave acima. -->
+             descrição a partir do código e da palavra-chave acima.
+
+             cursor-pointer é explicitado aqui (e em todo o formulário)
+             porque o cursor padrão do navegador para <button> é a seta
+             normal, não a mãozinha — sem essa classe o botão pareceria
+             não-clicável, mesmo estando ativo. Quando "disabled" (enquanto
+             gerandoDescricao() é true), "disabled:cursor-not-allowed" tem
+             prioridade e mostra o cursor de "proibido", reforçando que o
+             clique não terá efeito naquele momento. -->
         <button
           type="button"
           (click)="gerarDescricaoComIA()"
           [disabled]="gerandoDescricao()"
-          class="mt-2 min-h-11 w-full whitespace-nowrap rounded-lg border border-indigo-200 bg-indigo-50 px-3.5 text-sm font-medium text-indigo-700 transition-colors hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60"
+          class="mt-2 min-h-11 w-full cursor-pointer whitespace-nowrap rounded-lg border border-indigo-200 bg-indigo-50 px-3.5 text-sm font-medium text-indigo-700 transition-colors hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {{ gerandoDescricao() ? 'Gerando...' : '✨ Gerar com IA' }}
         </button>
@@ -86,13 +94,13 @@
         <button
           type="button"
           (click)="cancelar()"
-          class="flex min-h-11 w-full items-center justify-center rounded-lg bg-gray-100 px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 sm:w-auto sm:flex-1"
+          class="flex min-h-11 w-full cursor-pointer items-center justify-center rounded-lg bg-gray-100 px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 sm:w-auto sm:flex-1"
         >
           Cancelar
         </button>
         <button
           type="submit"
-          class="flex min-h-11 w-full items-center justify-center rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700 sm:w-auto sm:flex-1"
+          class="flex min-h-11 w-full cursor-pointer items-center justify-center rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700 sm:w-auto sm:flex-1"
         >
           {{ editando() ? 'Salvar Alterações' : 'Salvar' }}
         </button>
