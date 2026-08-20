@@ -60,9 +60,18 @@ builder.Services.AddDbContext<FaturamentoDbContext>(options =>
 // URL usada aqui é "http://estoque-api:8080/" (porta interna do container,
 // definida no Dockerfile/compose), e não "http://localhost:5001/" (que é só a
 // porta exposta para acesso de fora do Docker, da sua máquina).
+// Essa URL muda dependendo do ambiente: localmente, os containers se
+// enxergam pelo nome do serviço no Docker Compose (daí o fallback
+// "http://estoque-api:8080/"); em produção, cada microsserviço tem sua
+// própria URL pública, então precisamos apontar explicitamente para ela via
+// a variável de ambiente ESTOQUE_API_BASE_URL.
+var estoqueApiUrl = builder.Configuration["ESTOQUE_API_BASE_URL"]
+    ?? Environment.GetEnvironmentVariable("ESTOQUE_API_BASE_URL")
+    ?? "http://estoque-api:8080/";
+
 builder.Services.AddHttpClient("EstoqueAPI", client =>
 {
-    client.BaseAddress = new Uri("http://estoque-api:8080/");
+    client.BaseAddress = new Uri(estoqueApiUrl);
 });
 
 // CORS (Cross-Origin Resource Sharing) é o mecanismo que os navegadores usam
