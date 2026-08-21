@@ -91,6 +91,53 @@ public class ProdutosController : ControllerBase
         return Ok(produto);
     }
 
+    // [HttpGet("por-ids")] atende "GET /api/produtos/por-ids?ids=1,2,3".
+    //
+    // Este endpoint existe especificamente para permitir que o Faturamento.API
+    // busque, numa ÚNICA chamada HTTP, todos os produtos referenciados pelos
+    // itens de uma ou mais notas fiscais (ex: ao listar notas fiscais, exibindo
+    // o Código e a Descrição de cada produto). Sem ele, o Faturamento.API
+    // precisaria fazer uma requisição HTTP separada para cada item de cada
+    // nota (uma chamada por ProdutoId) — o chamado problema N+1 aplicado a
+    // comunicação entre microsserviços, que é ainda mais custoso que N+1 em
+    // banco de dados, pois cada chamada aqui envolve latência de rede entre
+    // dois processos/containers diferentes. Recebendo todos os Ids de uma vez
+    // via query string, resolvemos tudo em uma única ida e volta.
+    [HttpGet("por-ids")]
+    public async Task<ActionResult<IEnumerable<Produto>>> GetProdutosPorIds([FromQuery] string? ids)
+    {
+        // Sem "ids" (ou vazio), não há o que buscar: devolvemos uma lista
+        // vazia em vez de tentar interpretar uma string vazia como números.
+        if (string.IsNullOrWhiteSpace(ids))
+        {
+            return Ok(new List<Produto>());
+        }
+
+        // Quebra a string recebida ("1,2,3") em pedaços separados por vírgula,
+        // remove entradas vazias (ex: ids repetidos com vírgula sobrando) e
+        // converte cada pedaço para "int", ignorando qualquer pedaço que não
+        // seja um número válido (TryParse) em vez de derrubar a requisição
+        // inteira com uma exceção por causa de um Id malformado.
+        var idsList = ids
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(idTexto => int.TryParse(idTexto, out var idNumero) ? (int?)idNumero : null)
+            .Where(idNumero => idNumero.HasValue)
+            .Select(idNumero => idNumero!.Value)
+            .ToList();
+
+        // Where + Contains gera um único "SELECT ... WHERE \"Id\" IN (1,2,3)"
+        // no banco, buscando todos os produtos pedidos numa única consulta
+        // (em vez de um FindAsync por Id, que seria N consultas ao banco).
+        // Se algum Id da lista não existir mais (produto excluído, por
+        // exemplo), ele simplesmente não aparece no resultado — não é erro,
+        // apenas devolvemos os produtos que de fato encontramos.
+        var produtos = await _context.Produtos
+            .Where(p => idsList.Contains(p.Id))
+            .ToListAsync();
+
+        return Ok(produtos);
+    }
+
     // [HttpPost] atende "POST /api/produtos". O parâmetro "produto" vem do corpo
     // (body) da requisição em JSON; o ASP.NET Core desserializa automaticamente
     // o JSON recebido para um objeto Produto (isso é o "model binding").

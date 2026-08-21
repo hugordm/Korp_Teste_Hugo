@@ -73,9 +73,112 @@ public class NotasFiscaisController : ControllerBase
             .Include(n => n.Itens)
             .ToListAsync();
 
+        // Coleta todos os ProdutoId únicos de todos os itens de todas as
+        // notas (SelectMany "achata" a lista de listas de itens em uma única
+        // lista de itens; Distinct evita pedir o mesmo produto mais de uma
+        // vez ao Estoque.API, mesmo que ele apareça em vários itens/notas
+        // diferentes) e busca todos eles de uma vez no Estoque.API.
+        var produtoIds = notasFiscais
+            .SelectMany(n => n.Itens)
+            .Select(item => item.ProdutoId)
+            .Distinct();
+
+        var produtosPorId = await BuscarProdutosAsync(produtoIds);
+
+        // Preenche Código e Descrição de cada item com o que veio do
+        // Estoque.API. Se o Id não estiver no dicionário (produto excluído
+        // no Estoque, ou o Estoque.API estava indisponível e o dicionário
+        // veio vazio), marcamos como "Produto não encontrado" em vez de
+        // deixar null, para deixar claro na tela que a informação não pôde
+        // ser obtida.
+        foreach (var item in notasFiscais.SelectMany(n => n.Itens))
+        {
+            if (produtosPorId.TryGetValue(item.ProdutoId, out var produto))
+            {
+                item.CodigoProduto = produto.Codigo;
+                item.DescricaoProduto = produto.Descricao;
+            }
+            else
+            {
+                item.CodigoProduto = "Produto não encontrado";
+                item.DescricaoProduto = "Produto não encontrado";
+            }
+        }
+
         // Retornar o objeto diretamente faz o ASP.NET Core devolver
         // HTTP 200 OK com a lista de notas fiscais (e seus itens) em JSON.
         return Ok(notasFiscais);
+    }
+
+    // Busca, numa única chamada HTTP ao Estoque.API, os dados resumidos
+    // (Id, Código, Descrição) de todos os produtos cujos Ids são passados em
+    // "produtoIds". O resultado vem como um Dictionary indexado por Id para
+    // permitir busca O(1) na hora de preencher cada item da nota fiscal, em
+    // vez de varrer a lista inteira de produtos a cada item.
+    //
+    // Por que buscar em lote (uma query string com todos os Ids) em vez de
+    // uma chamada por item: se uma nota tem 10 itens, uma chamada por item
+    // significaria 10 requisições HTTP separadas ao Estoque.API só para
+    // montar UMA listagem — e isso multiplica pela quantidade de notas na
+    // tela. Cada requisição HTTP entre microsserviços tem um custo de
+    // latência de rede bem maior que uma chamada de método local, então
+    // esse padrão (N+1 aplicado a chamadas entre serviços) ficaria lento e
+    // sobrecarregaria o Estoque.API rapidamente. Buscando todos os Ids
+    // únicos de uma vez, o custo de rede é pago uma única vez,
+    // independentemente de quantos itens/notas estamos exibindo.
+    //
+    // Por que a falha aqui NÃO lança exceção (diferente do endpoint
+    // "imprimir", que propaga o erro com 502 Bad Gateway): imprimir uma nota
+    // é uma operação crítica que dá baixa real no estoque, então faz sentido
+    // travá-la se o Estoque.API estiver fora do ar (senão o dado ficaria
+    // inconsistente). Já listar ou visualizar notas fiscais é uma operação
+    // de LEITURA, sem efeito colateral nenhum — é só exibição de dados. Se o
+    // Estoque.API estiver indisponível nesse momento, é uma escolha de
+    // design melhorar a experiência do usuário deixando a listagem de notas
+    // continuar funcionando normalmente (só sem Código/Descrição do produto,
+    // que ficam como "Produto não encontrado") em vez de quebrar a tela
+    // inteira por causa de uma informação complementar.
+    private async Task<Dictionary<int, ProdutoResumo>> BuscarProdutosAsync(IEnumerable<int> produtoIds)
+    {
+        // Ids únicos, já sem duplicatas (o chamador também já faz Distinct,
+        // mas repetimos aqui para o método ser seguro mesmo se chamado com
+        // uma lista não tratada) e transformados em texto para montar a
+        // query string "1,2,3".
+        var idsUnicos = produtoIds.Distinct().ToList();
+
+        // Sem nenhum Id para buscar, não há motivo para chamar o
+        // Estoque.API — devolve um dicionário vazio direto.
+        if (idsUnicos.Count == 0)
+        {
+            return new Dictionary<int, ProdutoResumo>();
+        }
+
+        var queryString = string.Join(",", idsUnicos);
+
+        try
+        {
+            var httpClient = _httpClientFactory.CreateClient("EstoqueAPI");
+
+            var produtos = await httpClient.GetFromJsonAsync<List<ProdutoResumo>>(
+                $"api/produtos/por-ids?ids={queryString}");
+
+            // GetFromJsonAsync pode devolver null se o corpo da resposta for
+            // literalmente "null" (não deveria acontecer aqui, mas o
+            // compilador exige tratarmos esse caso). Usamos "?? new()" para
+            // nunca devolver um dicionário nulo.
+            return (produtos ?? new List<ProdutoResumo>())
+                .ToDictionary(produto => produto.Id);
+        }
+        catch (HttpRequestException)
+        {
+            // Falha de rede/infraestrutura ao contatar o Estoque.API
+            // (serviço fora do ar, timeout, DNS etc.). Não propagamos a
+            // exceção: devolvemos um dicionário vazio para que a listagem de
+            // notas fiscais continue funcionando mesmo sem os dados de
+            // produto (ver explicação completa no comentário acima do
+            // método).
+            return new Dictionary<int, ProdutoResumo>();
+        }
     }
 
     // [HttpGet("{id}")] atende "GET /api/notasfiscais/5", por exemplo.
@@ -98,6 +201,26 @@ public class NotasFiscaisController : ControllerBase
         if (notaFiscal == null)
         {
             return NotFound();
+        }
+
+        // Mesmo enriquecimento com Código/Descrição do produto feito em
+        // GetNotasFiscais (ver comentários detalhados em BuscarProdutosAsync
+        // logo abaixo), aqui só para os itens desta única nota.
+        var produtoIds = notaFiscal.Itens.Select(item => item.ProdutoId).Distinct();
+        var produtosPorId = await BuscarProdutosAsync(produtoIds);
+
+        foreach (var item in notaFiscal.Itens)
+        {
+            if (produtosPorId.TryGetValue(item.ProdutoId, out var produto))
+            {
+                item.CodigoProduto = produto.Codigo;
+                item.DescricaoProduto = produto.Descricao;
+            }
+            else
+            {
+                item.CodigoProduto = "Produto não encontrado";
+                item.DescricaoProduto = "Produto não encontrado";
+            }
         }
 
         // Encontrou: devolve 200 OK com a nota fiscal (e seus itens) em JSON.

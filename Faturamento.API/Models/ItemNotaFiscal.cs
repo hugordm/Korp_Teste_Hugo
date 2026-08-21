@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace Faturamento.API.Models;
 
 // Representa um item (uma linha) dentro de uma Nota Fiscal: um produto
@@ -25,4 +27,25 @@ public class ItemNotaFiscal
 
     // Quantidade do produto vendida nesse item da nota fiscal.
     public int Quantidade { get; set; }
+
+    // Código e Descrição do produto, buscados em tempo real no Estoque.API
+    // (via NotasFiscaisController.BuscarProdutosAsync) só para exibição na
+    // listagem/consulta de notas fiscais.
+    //
+    // [NotMapped] diz ao EF Core para IGNORAR essas duas propriedades ao
+    // mapear a classe para a tabela do banco — elas não viram colunas em
+    // "ItensNotaFiscal" e nunca são lidas/escritas em SELECT/INSERT/UPDATE.
+    // Isso é proposital: são dados que pertencem ao Estoque.API (é ele quem
+    // é "dono" do cadastro de produtos, com Código e Descrição podendo mudar
+    // a qualquer momento), não ao Faturamento.API. Persistir uma cópia deles
+    // aqui duplicaria a informação entre os dois bancos e criaria o risco de
+    // ela ficar desatualizada (ex: se o produto for renomeado no Estoque, a
+    // cópia salva aqui ficaria com o nome antigo). Por isso preenchemos essas
+    // propriedades apenas em memória, a cada requisição, com o valor mais
+    // recente vindo do outro serviço.
+    [NotMapped]
+    public string? CodigoProduto { get; set; }
+
+    [NotMapped]
+    public string? DescricaoProduto { get; set; }
 }
