@@ -125,7 +125,18 @@
                 <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
                   {{ nota.dataCriacao | date: 'dd/MM/yyyy HH:mm' }}
                 </td>
-                <td class="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-900">{{ nota.itens.length }}</td>
+                <td class="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-900">
+                  <!-- Clicar na quantidade de itens expande/recolhe a lista
+                       de produtos (Código, Descrição, Quantidade) da nota,
+                       sem sair da tela de listagem. -->
+                  <button
+                    type="button"
+                    (click)="alternarExpansao(nota.id)"
+                    class="cursor-pointer font-medium text-indigo-600 hover:text-indigo-800"
+                  >
+                    {{ nota.itens.length }} {{ estaExpandida(nota.id) ? '▲' : '▼' }}
+                  </button>
+                </td>
                 <td class="whitespace-nowrap px-6 py-4 text-right text-sm">
                   <div class="flex items-center justify-end gap-4">
                     <!-- O botão "Imprimir" só aparece ativo quando a nota está
@@ -159,6 +170,34 @@
                   </div>
                 </td>
               </tr>
+              @if (estaExpandida(nota.id)) {
+                <!-- Linha expandida: Código/Descrição de cada item já vêm
+                     prontos do backend (o Faturamento.API buscou isso no
+                     Estoque.API), então aqui é só exibição — nenhuma
+                     chamada extra é feita ao expandir. -->
+                <tr>
+                  <td colspan="5" class="bg-gray-50 px-6 py-4">
+                    <table class="min-w-full divide-y divide-gray-200">
+                      <thead>
+                        <tr>
+                          <th class="py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Código</th>
+                          <th class="py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Descrição</th>
+                          <th class="py-2 text-right text-xs font-medium uppercase tracking-wide text-gray-500">Quantidade</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-gray-200">
+                        @for (item of nota.itens; track item.id) {
+                          <tr>
+                            <td class="py-2 text-sm text-gray-900">{{ item.codigoProduto ?? 'Produto não encontrado' }}</td>
+                            <td class="py-2 text-sm text-gray-600">{{ item.descricaoProduto ?? 'Produto não encontrado' }}</td>
+                            <td class="py-2 text-right text-sm text-gray-900">{{ item.quantidade }}</td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  </td>
+                </tr>
+              }
             }
           </tbody>
         </table>
@@ -186,7 +225,30 @@
               }
             </div>
 
-            <p class="mt-3 text-sm text-gray-600">{{ nota.itens.length }} item(ns)</p>
+            <!-- Toca para expandir/recolher a lista de produtos (Código,
+                 Descrição, Quantidade) da nota — mesmos dados já vêm prontos
+                 do backend, sem nenhuma chamada extra ao expandir. -->
+            <button
+              type="button"
+              (click)="alternarExpansao(nota.id)"
+              class="mt-3 cursor-pointer text-sm font-medium text-indigo-600 hover:text-indigo-800"
+            >
+              {{ nota.itens.length }} item(ns) {{ estaExpandida(nota.id) ? '▲' : '▼' }}
+            </button>
+
+            @if (estaExpandida(nota.id)) {
+              <ul class="mt-2 flex flex-col gap-1.5 rounded-lg bg-gray-50 p-3">
+                @for (item of nota.itens; track item.id) {
+                  <li class="flex items-center justify-between gap-2 text-sm">
+                    <span class="min-w-0 truncate text-gray-900">
+                      <span class="font-medium">{{ item.codigoProduto ?? 'Produto não encontrado' }}</span>
+                      — {{ item.descricaoProduto ?? 'Produto não encontrado' }}
+                    </span>
+                    <span class="shrink-0 text-gray-600">x{{ item.quantidade }}</span>
+                  </li>
+                }
+              </ul>
+            }
 
             <div class="mt-4 flex gap-2">
               @if (nota.status === 'Aberta') {

@@ -127,6 +127,12 @@ export class NotaListComponent implements OnInit {
   // (o array "notas()" veio do listar() no ngOnInit). Não há nenhuma
   // requisição adicional ao backend aqui — nem para gerar o PDF, nem para
   // buscar dados extras — o download acontece só com o que já temos em mãos.
+  //
+  // Código e Descrição do produto vêm prontos em cada item (campos
+  // "codigoProduto"/"descricaoProduto", preenchidos pelo Faturamento.API a
+  // partir de uma consulta ao Estoque.API). O frontend não precisa fazer
+  // nenhuma chamada extra nem cruzar essa informação com uma lista de
+  // produtos carregada à parte — só exibe o que já veio na nota.
   baixarPdf(nota: NotaFiscal): void {
     const doc = new jsPDF();
 
@@ -148,17 +154,50 @@ export class NotaListComponent implements OnInit {
     // jspdf-autotable).
     doc.setFont('helvetica', 'bold');
     doc.text('Itens', 14, 58);
-    doc.text('Produto Id', 14, 65);
-    doc.text('Quantidade', 80, 65);
+    doc.text('Código', 14, 65);
+    doc.text('Descrição', 60, 65);
+    doc.text('Quantidade', 160, 65);
 
     doc.setFont('helvetica', 'normal');
     let y = 72;
     for (const item of nota.itens) {
-      doc.text(String(item.produtoId), 14, y);
-      doc.text(String(item.quantidade), 80, y);
+      // Quando o produto não foi encontrado no Estoque.API (excluído, ou o
+      // serviço estava indisponível na hora da consulta), o backend manda
+      // "codigoProduto"/"descricaoProduto" como null — exibimos um texto
+      // explicativo no lugar em vez de deixar a célula em branco ou
+      // imprimir "null".
+      const codigo = item.codigoProduto ?? 'Produto não encontrado';
+      const descricao = item.descricaoProduto ?? 'Produto não encontrado';
+
+      doc.text(codigo, 14, y);
+      doc.text(descricao, 60, y);
+      doc.text(String(item.quantidade), 160, y);
       y += 7;
     }
 
     doc.save(`nota-fiscal-${nota.numero}.pdf`);
+  }
+
+  // Controla quais notas estão "expandidas" na listagem, mostrando a lista
+  // de itens (Código, Descrição, Quantidade) diretamente na tela — sem essa
+  // expansão, a tabela principal só mostra a quantidade de itens, sem
+  // detalhar quais produtos compõem a nota. Um Set guarda os ids das notas
+  // expandidas no momento; alternamos (expande/recolhe) um id por vez.
+  private readonly notasExpandidas = signal<ReadonlySet<number>>(new Set());
+
+  estaExpandida(notaId: number): boolean {
+    return this.notasExpandidas().has(notaId);
+  }
+
+  alternarExpansao(notaId: number): void {
+    const atual = new Set(this.notasExpandidas());
+
+    if (atual.has(notaId)) {
+      atual.delete(notaId);
+    } else {
+      atual.add(notaId);
+    }
+
+    this.notasExpandidas.set(atual);
   }
 }

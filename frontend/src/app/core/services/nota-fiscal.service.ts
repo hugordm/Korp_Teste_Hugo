@@ -4,10 +4,23 @@ import { Observable } from 'rxjs';
 
 // Interface que descreve um item de nota fiscal como ele volta do backend
 // (Faturamento.API), já com o "id" gerado pelo banco de dados.
+//
+// "codigoProduto" e "descricaoProduto" NÃO são dados do Faturamento.API —
+// o Faturamento.API só guarda o "produtoId". Esses dois campos são
+// resolvidos no backend, em tempo real, através de uma chamada HTTP ao
+// Estoque.API (o microsserviço dono do cadastro de produtos), e já chegam
+// prontos aqui no JSON de cada item. Por isso o frontend não precisa (e não
+// deve) buscar produtos separadamente nem cruzar essa informação na mão: a
+// comunicação entre os dois microsserviços já aconteceu no servidor. Podem
+// vir "null" quando o produto não é mais encontrado no Estoque.API (ex: foi
+// excluído) ou quando o Estoque.API estava indisponível no momento da
+// consulta.
 export interface ItemNotaFiscal {
   id: number;
   produtoId: number;
   quantidade: number;
+  codigoProduto: string | null;
+  descricaoProduto: string | null;
 }
 
 // Interface que descreve a nota fiscal completa, como ela volta do backend
