@@ -97,10 +97,34 @@ export class NotaFormComponent implements OnInit {
     // inexistente) e mostrar isso na tela, em vez de deixar o erro sem
     // tratamento.
     this.notaFiscalService.criar(nota).subscribe({
-      next: () => {
-        this.router.navigate(['/notas']);
+      next: (notaCriada) => {
+        // TEMPORÁRIO (debug): confirma que o backend respondeu com sucesso e
+        // que este callback realmente foi chamado antes do navigate. Se essa
+        // linha não aparecer no console ao salvar, o problema está ANTES
+        // daqui (ex: a requisição nem chegou a completar, ou caiu no
+        // "error" abaixo) — não na chamada ao Router.
+        console.log('[NotaForm] POST criar() respondeu com sucesso, navegando para /notas', notaCriada);
+        this.router.navigate(['/notas']).then((navegou) => {
+          // Router.navigate() devolve uma Promise<boolean>: "true" se a
+          // navegação foi concluída, "false" se foi CANCELADA silenciosamente
+          // (ex: por um guard, ou por outra navegação que a sobrepôs) — nesse
+          // caso NENHUM erro é lançado, só o retorno vem "false", que é
+          // exatamente o tipo de falha "muda" que se encaixa no sintoma
+          // relatado (sem erro no console, mas a tela não navega).
+          console.log('[NotaForm] router.navigate(["/notas"]) concluiu, sucesso =', navegou);
+        });
       },
       error: (err: HttpErrorResponse) => {
+        // TEMPORÁRIO (debug): se esta linha aparecer no console ao salvar
+        // (mesmo sem nenhum "erro" nativo do navegador), significa que a
+        // Promise/Observable do HttpClient caiu aqui, e não no "next" acima
+        // — por isso o navigate() nunca chega a ser chamado. Isso acontece,
+        // por exemplo, quando a requisição é bloqueada por CORS depois de já
+        // ter chegado ao servidor (o INSERT no banco já aconteceu, mas o
+        // navegador não deixa o Angular ler a resposta), o que bate com o
+        // sintoma de "a nota parece salva, mas a tela não navega".
+        console.log('[NotaForm] POST criar() caiu no error(), navigate NÃO foi chamado. Detalhe:', err);
+
         const mensagem =
           typeof err.error === 'string' && err.error.trim().length > 0
             ? err.error

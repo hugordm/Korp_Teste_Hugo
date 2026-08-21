@@ -148,18 +148,44 @@ export class NotaListComponent implements OnInit {
     doc.text(`Status: ${nota.status}`, 14, 39);
     doc.text(`Data de Criação: ${new Date(nota.dataCriacao).toLocaleString('pt-BR')}`, 14, 46);
 
+    // Layout das colunas da tabela de itens. Uma página A4 tem 210mm de
+    // largura; com margens de 10mm dos dois lados, sobram ~190mm úteis.
+    // Começamos em x=14 (mesma margem usada no cabeçalho acima) e somamos a
+    // largura de cada coluna para achar onde a próxima começa — assim as
+    // três larguras (35 + 100 + 30 = 165mm) cabem dentro do espaço útil sem
+    // que a coluna "Descrição" invada a coluna "Quantidade" nem estoure a
+    // borda direita da página.
+    const xCodigo = 14;
+    const larguraCodigo = 35;
+    const xDescricao = xCodigo + larguraCodigo;
+    const larguraDescricao = 100;
+    const xQuantidade = xDescricao + larguraDescricao;
+
+    // Altura de cada linha de texto dentro da tabela, em mm. Usada tanto
+    // para separar as linhas de uma descrição quebrada em várias linhas
+    // quanto para calcular quanto espaço uma linha inteira da tabela ocupa.
+    const alturaLinha = 5;
+
     // Lista de itens em formato de "tabela simples": um cabeçalho de colunas
     // seguido de uma linha por item, usando espaçamento fixo entre colunas
     // (em vez de uma tabela sofisticada, que exigiria um plugin extra como
     // jspdf-autotable).
+    doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
     doc.text('Itens', 14, 58);
-    doc.text('Código', 14, 65);
-    doc.text('Descrição', 60, 65);
-    doc.text('Quantidade', 160, 65);
+
+    // Fonte um pouco menor para a tabela (cabeçalho de colunas + linhas),
+    // separada da fonte do cabeçalho da nota (Número/Status/Data, que
+    // continua em 11pt): assim aproveitamos melhor o espaço horizontal das
+    // colunas sem reduzir a legibilidade dos dados principais da nota.
+    doc.setFontSize(9);
+    doc.text('Código', xCodigo, 65);
+    doc.text('Descrição', xDescricao, 65);
+    doc.text('Quantidade', xQuantidade, 65);
 
     doc.setFont('helvetica', 'normal');
     let y = 72;
+
     for (const item of nota.itens) {
       // Quando o produto não foi encontrado no Estoque.API (excluído, ou o
       // serviço estava indisponível na hora da consulta), o backend manda
@@ -169,10 +195,44 @@ export class NotaListComponent implements OnInit {
       const codigo = item.codigoProduto ?? 'Produto não encontrado';
       const descricao = item.descricaoProduto ?? 'Produto não encontrado';
 
-      doc.text(codigo, 14, y);
-      doc.text(descricao, 60, y);
-      doc.text(String(item.quantidade), 160, y);
-      y += 7;
+      // Diferente de HTML/CSS, o jsPDF não quebra nem reflui texto
+      // automaticamente: doc.text() escreve a string inteira numa única
+      // linha, ultrapassando a largura da coluna se o texto for longo (foi
+      // exatamente esse o bug relatado). splitTextToSize() é quem faz essa
+      // quebra manualmente, devolvendo um array com uma string por linha,
+      // já respeitando a largura máxima informada (larguraDescricao).
+      const linhasDescricao = doc.splitTextToSize(descricao, larguraDescricao) as string[];
+
+      // Como cada linha do PDF é desenhada numa posição Y fixa (não existe
+      // "a próxima linha empurra a de baixo" como no fluxo normal de um
+      // documento HTML), precisamos calcular NA MÃO quantas linhas essa
+      // descrição ocupou e, a partir disso, quanta altura esse item inteiro
+      // vai consumir na página — é essa altura que soma no "y" ao final do
+      // laço, para o próximo item começar depois do fim do texto atual, e
+      // não por cima dele.
+      const alturaItem = linhasDescricao.length * alturaLinha;
+
+      // Código e Quantidade sempre cabem numa linha só (são curtos), então
+      // são desenhados na primeira linha de texto do item (mesmo "y" da
+      // primeira linha da descrição), alinhados com ela.
+      doc.text(codigo, xCodigo, y);
+      doc.text(linhasDescricao, xDescricao, y);
+      doc.text(String(item.quantidade), xQuantidade, y);
+
+      // Avança "y" pela altura real que este item ocupou (uma linha ou
+      // várias, dependendo do tamanho da descrição), mais um pequeno
+      // espaçamento extra entre itens para não deixar a tabela "grudada".
+      y += alturaItem + 3;
+
+      // Sem paginação manual, uma nota com muitos itens (ou descrições
+      // muito longas) acabaria com texto desenhado além do fim da página A4
+      // (~297mm) — o jsPDF não pula de página sozinho, então esse controle
+      // também precisa ser manual: ao chegar perto do rodapé, iniciamos uma
+      // nova página e continuamos a tabela a partir do topo dela.
+      if (y > 280 && nota.itens.indexOf(item) < nota.itens.length - 1) {
+        doc.addPage();
+        y = 20;
+      }
     }
 
     doc.save(`nota-fiscal-${nota.numero}.pdf`);
